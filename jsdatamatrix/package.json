@@ -1,0 +1,7 @@
+{
+  "name": "jsdatamatrix",
+  "version": "0.0.1",
+  "description": "port of zebra crossing data matrix reader",
+  "dependencies": {},
+  "devDependencies": {}
+}

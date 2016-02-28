@@ -1,0 +1,3 @@
+
+
+Did a test to see how fast LSD (with no -O flag) could execute on a 4160x3120 pixel image on my x220. The result was that LSD could execute 11.6 times per second.

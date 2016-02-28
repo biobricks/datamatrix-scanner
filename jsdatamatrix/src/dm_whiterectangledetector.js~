@@ -1,0 +1,160 @@
+
+
+module.exports = function(image, initSize, x, y) {
+    if(!initSize) {
+        initSize = 10;
+        x = image.width / 2;
+        y = image.height / 2;
+    }
+
+    this.image = image;
+    this.height = image.height;
+    this.width = image.width;
+    var halfSize = Math.round(initSize / 2);
+    this.leftInit = x - halfSize;
+    this.rightInit = x + halfSize;
+    this.upInit = y - halfSize;
+    this.downInit = y + halfSize;
+
+    if(this.upInit < 0 || this.leftInit < 0 || this.downInit >= this.height || this.rightInit >= this.width) {
+        throw new Error("Image dimensions not supported");
+    }
+
+    this.containsBlackPoint = function(a, b, fixed, horizontal) {
+        
+        if (horizontal) {
+            for (var x = a; x <= b; x++) {
+                if (image.get(x, fixed)) {
+                    return true;
+                }
+            }
+        } else {
+            for (var y = a; y <= b; y++) {
+                if (image.get(fixed, y)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    };
+
+    this.detect = function() {
+     
+        var ix, iy;
+        for(ix=0; ix < 200; ix++) {
+            for(iy=0; iy < 200; iy++) {
+//                if(this.image[ix, iy]) {
+                    console.log("PIXEL:", this.image[ix, iy]);
+//                }
+            }
+        }
+        return;
+   
+        var left = this.leftInit;
+        var right = this.rightInit;
+        var up = this.upInit;
+        var down = this.downInit;
+        var sizeExceeded = false;
+        var aBlackPointFoundOnBorder = true;
+        var atLeastOneBlackPointFoundOnBorder = false;
+        
+        var atLeastOneBlackPointFoundOnRight = false;
+        var atLeastOneBlackPointFoundOnBottom = false;
+        var atLeastOneBlackPointFoundOnLeft = false;
+        var atLeastOneBlackPointFoundOnTop = false;
+
+        while (aBlackPointFoundOnBorder) {
+
+            aBlackPointFoundOnBorder = false;
+
+            // .....
+            // .   |
+            // .....
+            var rightBorderNotWhite = true;
+            while ((rightBorderNotWhite || !atLeastOneBlackPointFoundOnRight) && right < width) {
+                rightBorderNotWhite = this.containsBlackPoint(up, down, right, false);
+                if (rightBorderNotWhite) {
+                    right++;
+                    aBlackPointFoundOnBorder = true;
+                    atLeastOneBlackPointFoundOnRight = true;
+                } else if (!atLeastOneBlackPointFoundOnRight) {
+                    right++;
+                }
+            }
+
+            if (right >= width) {
+                sizeExceeded = true;
+                break;
+            }
+/*
+            // .....
+            // .   .
+            // .___.
+            boolean bottomBorderNotWhite = true;
+            while ((bottomBorderNotWhite || !atLeastOneBlackPointFoundOnBottom) && down < height) {
+                bottomBorderNotWhite = containsBlackPoint(left, right, down, true);
+                if (bottomBorderNotWhite) {
+                    down++;
+                    aBlackPointFoundOnBorder = true;
+                    atLeastOneBlackPointFoundOnBottom = true;
+                } else if (!atLeastOneBlackPointFoundOnBottom) {
+                    down++;
+                }
+            }
+
+            if (down >= height) {
+                sizeExceeded = true;
+                break;
+            }
+
+            // .....
+            // |   .
+            // .....
+            boolean leftBorderNotWhite = true;
+            while ((leftBorderNotWhite || !atLeastOneBlackPointFoundOnLeft) && left >= 0) {
+                leftBorderNotWhite = containsBlackPoint(up, down, left, false);
+                if (leftBorderNotWhite) {
+                    left--;
+                    aBlackPointFoundOnBorder = true;
+                    atLeastOneBlackPointFoundOnLeft = true;
+                } else if (!atLeastOneBlackPointFoundOnLeft) {
+                    left--;
+                }
+            }
+
+            if (left < 0) {
+                sizeExceeded = true;
+                break;
+            }
+
+            // .___.
+            // .   .
+            // .....
+            boolean topBorderNotWhite = true;
+            while ((topBorderNotWhite  || !atLeastOneBlackPointFoundOnTop) && up >= 0) {
+                topBorderNotWhite = containsBlackPoint(left, right, up, true);
+                if (topBorderNotWhite) {
+                    up--;
+                    aBlackPointFoundOnBorder = true;
+                    atLeastOneBlackPointFoundOnTop = true;
+                } else if (!atLeastOneBlackPointFoundOnTop) {
+                    up--;
+                }
+            }
+
+            if (up < 0) {
+                sizeExceeded = true;
+                break;
+            }
+
+            if (aBlackPointFoundOnBorder) {
+                atLeastOneBlackPointFoundOnBorder = true;
+            }
+*/
+        };
+
+
+
+    };
+};

@@ -1,0 +1,14 @@
+
+var WhiteRectangleDetector = require('./dm_whiterectangledetector.js');
+
+
+module.exports = function() {
+
+    this.detect = function(image) {
+
+        var rectangleDetector = new WhiteRectangleDetector(image);
+        var res = rectangleDetector.detect();
+
+    };
+
+}
