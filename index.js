@@ -30,19 +30,17 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
             x1 = x1.x1;
         }
     }
-    console.log("Drawing:", x1, y1, x2, y2, width, color);
+//    console.log("Drawing:", x1, y1, x2, y2, width, color);
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.lineWidth = width;
-    ctx.strokeStyle = color || 'rgba(0, 255, 0, 0.2)';
+    ctx.strokeStyle = color || 'rgba(0, 255, 0, 0.1)';
     ctx.stroke();
 }
 
-function detectLines(img, canvas) {
-    var ctx = canvas.getContext('2d');
 
-    var downSize = 400;
+function drawImageTo(img, ctx, downSize) {
 
     if(img.width > img.height) {
         var newHeight = downSize * img.height / img.width;
@@ -51,8 +49,17 @@ function detectLines(img, canvas) {
         var newWidth = downSize * img.width / img.height;
         ctx.drawImage(img, Math.round((downSize - newWidth) / 2), 0, newWidth, downSize);
     }
-    
-    stackBlurCanvasRGBA('output', 0, 0, downSize, downSize, 10);
+
+}
+
+function detectLines(img, canvas, blur) {
+    var ctx = canvas.getContext('2d');
+
+    var downSize = 400;
+
+    drawImageTo(img, ctx, downSize);
+        
+    stackBlurCanvasRGBA(canvas, 0, 0, downSize, downSize, blur);
     
     var bm = new BitMatrix(canvas, {grayscale: true});
     bm.brightnessAndContrast(80, 150);
@@ -261,7 +268,7 @@ function findDottedLines(ctx, lineA, lineB, opts) {
     p2 = pointAdd(p2, diff);
     out.lineA = {p1: p1, p2: p2};
 
-    drawLine(ctx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.2)');
+    drawLine(ctx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
 
     diff = pointDiff(lineA.origin, lineB.origin);
     p1 = pointAdd(lineB.remote, diff);
@@ -270,7 +277,7 @@ function findDottedLines(ctx, lineA, lineB, opts) {
     p2 = pointAdd(p2, diff);
     out.lineB = {p1: p1, p2: p2};
 
-    drawLine(ctx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.2)');
+    drawLine(ctx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
 
     // ToDo
     /*
@@ -309,34 +316,44 @@ function performanceTest(img, canvas, seconds) {
 
 function run() {
 
-    var canvas = $('#output')[0];
+    var canvas = $('#debug')[0];
     var img = $('#input')[0];
     var ctx = canvas.getContext('2d');
 
-    var lines = detectLines(img, canvas);
+    var detectCtx = $('#detect')[0].getContext('2d');
+    drawImageTo(img, detectCtx, 400);
 
-    console.log("Found", lines.length, "line segments");
-/*
-    
-    var i, line;
-    for(i=0; i < lines.length; i++) {
-        line = lines[i];
-        console.log("Line:", line);
-        drawLine(ctx, line.x1, line.y1, line.x2, line.y2, line.width);
+    var lines;
+    var blur;
+    var candidates;
+
+    for(blur=4; blur <= 12; blur+=2) {
+        lines = detectLines(img, canvas, blur);
+
+        console.log("Found", lines.length, "line segments");
+        /*
+          
+          var i, line;
+          for(i=0; i < lines.length; i++) {
+          line = lines[i];
+          console.log("Line:", line);
+          drawLine(ctx, line.x1, line.y1, line.x2, line.y2, line.width);
+          }
+        */
+
+        candidates = findL(lines);
+        console.log("For blur:", blur, "Found", candidates.length, "L-shape candidates");
+        if(candidates.length) break;
     }
-*/
-
-    var candidates = findL(lines);
-    console.log("Found", candidates.length, "L-shape candidates");
 
     var i, c;
     for(i=0; i < candidates.length; i++) {
         c = candidates[i];
-        console.log("lCandidate lineA:", JSON.stringify(c.lineA));
-        console.log("lCandidate lineB:", JSON.stringify(c.lineB));
-        drawLine(ctx, c.lineA);
-        drawLine(ctx, c.lineB);
-        findDottedLines(ctx, c.lineA, c.lineB);
+//        console.log("lCandidate lineA:", JSON.stringify(c.lineA));
+//        console.log("lCandidate lineB:", JSON.stringify(c.lineB));
+        drawLine(detectCtx, c.lineA);
+        drawLine(detectCtx, c.lineB);
+        findDottedLines(detectCtx, c.lineA, c.lineB);
     }
 
 }
