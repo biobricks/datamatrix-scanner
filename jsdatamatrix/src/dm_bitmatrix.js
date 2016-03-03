@@ -56,6 +56,7 @@ function BitMatrix(image, opts) {
 
         var grayscale = this._imageDataToGrayscale(imageData);
         imageData = null;
+
         if(opts.grayscale) {
             // TODO add getMiddleBrightnessPerArea functionality
             // in grayscale mode
@@ -69,20 +70,62 @@ function BitMatrix(image, opts) {
         var areaWidth = Math.floor(width / sqrtNumArea);
         var areaHeight = Math.floor(height / sqrtNumArea);
         this.bits = new Array(width * height);
-        var i, ay, ax, dy, dx;
+        var i, ay, ax, dy, dx, diff;
+        console.log("areaHeight", areaHeight);
         for (ay = 0; ay < sqrtNumArea; ay++) {
             for (ax = 0; ax < sqrtNumArea; ax++) {
                 for (dy = 0; dy < areaHeight; dy++) {
                     for (dx = 0; dx < areaWidth; dx++) {
                         i = areaWidth * ax + dx+ (areaHeight * ay + dy) * width
-                        this.bits[i] = (grayscale[areaWidth * ax + dx+ (areaHeight * ay + dy)*width] < middle[ax][ay]) ? true : false;
+                        if(opts.grayscale) {
+                            // ToDo not used and broken
+                            diff = middle[ax][ay] - grayscale[i];
+                            if(diff > 0) { // darker than average
+                                this.bits[i] = Math.round(Math.min(grayscale[i] + 20, 255));
+                            } else { // lighter than average
+                                this.bits[i] = Math.round(Math.max(grayscale[i] - 20, 0));
+                            }
+
+                        } else {
+                            this.bits[i] = (grayscale[i] < middle[ax][ay]) ? true : false;
+                        }
                     }
                 }
             }
         }
     };
     
-    this._imageDataToGrayscale = function(imageData) {
+    this.brightnessAndContrast = function(brightness, contrast) {
+
+        brightness = brightness || 0;
+        contrast = contrast || 0;
+        brightness = Math.max(Math.min(brightness, 255), 0);
+        contrast = Math.max(Math.min(contrast, 259), 0);
+
+        var factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+        var i, c;
+        
+        for(i=0; i < this.bits.length; i++) {
+            this.bits[i] = factor * (Math.min(this.bits[i] + brightness, 255) - 128) + 128;
+        }
+    };
+
+    this.drawImage = function(ctx) {
+        var imgData = ctx.getImageData(0, 0, this.width, this.height);
+        var data = imgData.data;
+        var i, c;
+        
+        for(i=0; i < data.length; i += 4) {
+            c = this.bits[i/4];
+            data[i] = c;
+            data[i+1] = c;
+            data[i+2] = c;
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+    };
+   
+   this._imageDataToGrayscale = function(imageData) {
         var grayscale = new Array(imageData.width * imageData.height);
 
         var data = imageData.data;
@@ -100,7 +143,7 @@ function BitMatrix(image, opts) {
     };
     
     this._getMiddleBrightnessPerArea = function(image, width, height) {
-        var numSqrtArea = 4;
+        var numSqrtArea = 8;
         // obtain middle brightness((min + max) / 2) per area
         var areaWidth = Math.floor(width / numSqrtArea);
         var areaHeight = Math.floor(height / numSqrtArea);

@@ -52,9 +52,12 @@ function detectLines(img, canvas) {
         ctx.drawImage(img, Math.round((downSize - newWidth) / 2), 0, newWidth, downSize);
     }
     
-    stackBlurCanvasRGBA('output', 0, 0, downSize, downSize, 4);
+    stackBlurCanvasRGBA('output', 0, 0, downSize, downSize, 10);
     
     var bm = new BitMatrix(canvas, {grayscale: true});
+    bm.brightnessAndContrast(80, 150);
+
+    bm.drawImage(ctx);
     
     var lines = lsd.lsd(bm.bits, bm.width, bm.height);
 
@@ -64,6 +67,7 @@ function detectLines(img, canvas) {
         line.p1 = {x: line.x1, y: line.y1};
         line.p2 = {x: line.x2, y: line.y2};
     }
+
     return lines;
 }
 
@@ -342,7 +346,7 @@ function main() {
     image = $('#input')[0];
     image.onload = run;
 //    image.src = 'samples/phone.jpg';
-    image.src = 'samples/plate1_cropped_fixed.jpg';
+    image.src = 'samples/plate1_cropped.jpg';
     
 }
 
