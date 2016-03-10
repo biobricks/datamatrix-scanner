@@ -256,6 +256,11 @@ function pointAdd(p1, p2) {
     return {x: p1.x + p2.x, y: p1.y + p2.y};
 }
 
+// subtract one point to another 
+function pointSub(p1, p2) {
+    return {x: p1.x - p2.x, y: p1.y - p2.y};
+}
+
 function findDottedLines(ctx, lineA, lineB, opts) {
 
     var diff, p1, p2;
@@ -263,7 +268,7 @@ function findDottedLines(ctx, lineA, lineB, opts) {
 
     diff = pointDiff(lineA.origin, lineB.origin);
     p1 = pointAdd(lineA.remote, diff);
-    p2 = pointAdd(lineB.remote, diff);
+    p2 = pointSub(lineB.remote, diff);
     diff = pointDiff(lineA.origin, lineA.remote);
     p2 = pointAdd(p2, diff);
     out.lineA = {p1: p1, p2: p2};
@@ -362,8 +367,8 @@ function run() {
 function main() {
     image = $('#input')[0];
     image.onload = run;
-//    image.src = 'samples/phone.jpg';
-    image.src = 'samples/plate1_cropped.jpg';
+        image.src = 'samples/sample1.jpg';
+//    image.src = 'samples/plate1_cropped.jpg';
     
 }
 

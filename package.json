@@ -2,7 +2,8 @@
   "name": "bionet-datamatrix",
   "version": "0.0.1",
   "dependencies": {
-    "xtend": "^4.0.1"
+    "xtend": "^4.0.1",
+    "jquery": "~2.2.1"
   },
   "scripts": {
     "build": "browserify index.js > bundle.js",
