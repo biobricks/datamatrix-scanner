@@ -75,7 +75,7 @@ function detectLines(img, canvas, blur) {
         line.p2 = {x: line.x2, y: line.y2};
     }
 
-    return lines;
+    return {lines: lines, bitmatrix: bm};
 }
 
 function pointDist(p1, p2) {
@@ -158,7 +158,7 @@ function smallestAngleBetween(lineA, lineB) {
 
     return diff;
 }
-
+/*
 function lineIntersection(lineA, lineB) {
     lineA.dy = lineA.y2 - lineA.y1;
     lineA.dx = lineA.x2 - lineA.x1;
@@ -197,7 +197,7 @@ function lineIntersection(lineA, lineB) {
 
     return ret;
 }
-
+*/
 // find the datamatrix L shape from the lines detected by LSD
 function findL(lines, opts) {
     opts = xtend({
@@ -261,9 +261,101 @@ function pointSub(p1, p2) {
     return {x: p1.x - p2.x, y: p1.y - p2.y};
 }
 
-function findDottedLines(ctx, lineA, lineB, opts) {
+// Sample a few pixels (currently 3x3) to determine the color
+// of one of the black or white cubes or "pixels" that make up the qr code.
+// Takes as input:
+// * a bitmatrix of the image
+// * an x,y position of the center of the cube
+// * the average pixel value of the general area being sampled
+// Returns: true for white and false for black
+function getCubeColor(bm, p, globalAvg) {
+    var avg = 0;
+    avg += bm.get(p.x, p.y);
+    avg += bm.get(p.x+1, p.y);
+    avg += bm.get(p.x, p.y+1);
+    avg += bm.get(p.x-1, p.y);
+    avg += bm.get(p.x, p.y-1);
+    avg += bm.get(p.x+1, p.y+1);
+    avg += bm.get(p.x+1, p.y-1);
+    avg += bm.get(p.x-1, p.y+1);
+    avg += bm.get(p.x-1, p.y-1);
+    avg = avg / 9;
+    if(avg <= globalAvg) {
+        return false;
+    }
+    return true;
+}
 
-    var diff, p1, p2;
+// get the average pixel value of a line from p1 to p2
+function getLineAverage(bm, p1, p2) {
+    var dx = p2.x - p1.x;
+    var dy = p2.y - p1.y;
+    var a, b;
+    var stepY = false;
+    var lineFunc;
+    if(dx == 0) {
+        stepY = true;
+        console.log("GOT 1");
+        lineFunc = function(y) {
+            return p1.x;
+        };
+    } else {
+        a = dy / dx;
+        b = p1.y - a * p1.x;
+        if(Math.abs(a) > 1) {
+        console.log("GOT 2");
+            stepY = true;
+            lineFunc = function(y) {
+                return Math.round((y - b) / a);
+            }
+        } else {
+        console.log("GOT 3");
+            lineFunc = function(x) {
+                return Math.round(a * x + b);
+            }
+        }
+    }
+
+    // step through all pixels in the line and sample them
+    var avg = 0;
+    var count = 0;
+    var x, y, min, max;
+    if(stepY) {
+        if(p1.y > p2.y) {
+            min = Math.round(p2.y);
+            max = Math.round(p1.y);
+        } else {
+            min = Math.round(p1.y);
+            max = Math.round(p2.y);
+        }
+        
+        for(y=min; y <= max; y++) {
+            x = lineFunc(y);
+            avg += bm.get(x, y);
+            count++;
+        }
+    } else {
+        if(p1.x > p2.x) {
+            min = Math.round(p2.x);
+            max = Math.round(p1.x);
+        } else {
+            min = Math.round(p1.x);
+            max = Math.round(p2.x);
+        }
+        
+        for(x=min; x <= max; x++) {
+            y = lineFunc(x);
+            avg += bm.get(x, y);
+            count++;
+        }
+    }
+
+    return avg / count;
+}
+
+function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
+
+    var diff, p1, p2, avg;
     var out = {};
 
     diff = pointDiff(lineA.origin, lineB.origin);
@@ -273,7 +365,9 @@ function findDottedLines(ctx, lineA, lineB, opts) {
     p2 = pointAdd(p2, diff);
     out.lineA = {p1: p1, p2: p2};
 
-    drawLine(ctx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
+    drawLine(drawCtx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
+    avg = getLineAverage(bm, p1, p2);
+    console.log("LineA average:", avg);
 
     diff = pointDiff(lineA.origin, lineB.origin);
     p1 = pointAdd(lineB.remote, diff);
@@ -282,21 +376,9 @@ function findDottedLines(ctx, lineA, lineB, opts) {
     p2 = pointAdd(p2, diff);
     out.lineB = {p1: p1, p2: p2};
 
-    drawLine(ctx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
-
-    // ToDo
-    /*
-      Call the point where the lines meet origin for both lines
-      Call the other ends of the lines remote
-      Take diff between lineB.int and lineA.int and add it to lineA.rem
-      This creates the first point in the first new line
-      Take the diff between lineA.rem and lineA.int and add it to lineB.rem
-      Also add to that point the diff between lineB.int and lineA.int
-      This now becomes the second point in the new line.
-
-      Do the same with lines switched to get other line.
-    */
-
+    drawLine(drawCtx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
+    avg = getLineAverage(bm, p1, p2);
+    console.log("LineB average:", avg);
     
 
 }
@@ -328,14 +410,14 @@ function run() {
     var detectCtx = $('#detect')[0].getContext('2d');
     drawImageTo(img, detectCtx, 400);
 
-    var lines;
+    var o;
     var blur;
     var candidates;
 
     for(blur=4; blur <= 12; blur+=2) {
-        lines = detectLines(img, canvas, blur);
+        o = detectLines(img, canvas, blur);
 
-        console.log("Found", lines.length, "line segments");
+        console.log("Found", o.lines.length, "line segments");
         /*
           
           var i, line;
@@ -346,7 +428,7 @@ function run() {
           }
         */
 
-        candidates = findL(lines);
+        candidates = findL(o.lines);
         console.log("For blur:", blur, "Found", candidates.length, "L-shape candidates");
         if(candidates.length) break;
     }
@@ -358,7 +440,7 @@ function run() {
 //        console.log("lCandidate lineB:", JSON.stringify(c.lineB));
         drawLine(detectCtx, c.lineA);
         drawLine(detectCtx, c.lineB);
-        findDottedLines(detectCtx, c.lineA, c.lineB);
+        findDottedLines(o.bitmatrix, detectCtx, c.lineA, c.lineB);
     }
 
 }

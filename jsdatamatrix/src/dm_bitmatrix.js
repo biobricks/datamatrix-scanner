@@ -24,7 +24,7 @@ function BitMatrix(image, opts) {
     this.get = function(x, y) {
         return this.bits[y * this.width + x];
     };
-    
+
     this.set = function(x, y) {
         this.bits[y * this.width + x] = true;
     };
