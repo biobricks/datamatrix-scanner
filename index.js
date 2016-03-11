@@ -262,28 +262,25 @@ function pointSub(p1, p2) {
 }
 
 // Sample a few pixels (currently 3x3) to determine the color
-// of one of the black or white cubes or "pixels" that make up the qr code.
+// of one of the black or white squares or "pixels" that make up the qr code.
 // Takes as input:
 // * a bitmatrix of the image
-// * an x,y position of the center of the cube
+// * an x,y position of the center of the square
 // * the average pixel value of the general area being sampled
-// Returns: true for white and false for black
-function getCubeColor(bm, p, globalAvg) {
+// Returns the average of the sampled pixels
+function getSquareColor(bm, x, y) {
     var avg = 0;
-    avg += bm.get(p.x, p.y);
-    avg += bm.get(p.x+1, p.y);
-    avg += bm.get(p.x, p.y+1);
-    avg += bm.get(p.x-1, p.y);
-    avg += bm.get(p.x, p.y-1);
-    avg += bm.get(p.x+1, p.y+1);
-    avg += bm.get(p.x+1, p.y-1);
-    avg += bm.get(p.x-1, p.y+1);
-    avg += bm.get(p.x-1, p.y-1);
+    avg += bm.get(x, y);
+    avg += bm.get(x+1, y);
+    avg += bm.get(x, y+1);
+    avg += bm.get(x-1, y);
+    avg += bm.get(x, y-1);
+    avg += bm.get(x+1, y+1);
+    avg += bm.get(x+1, y-1);
+    avg += bm.get(x-1, y+1);
+    avg += bm.get(x-1, y-1);
     avg = avg / 9;
-    if(avg <= globalAvg) {
-        return false;
-    }
-    return true;
+    return avg;
 }
 
 // get the average pixel value of a line from p1 to p2
@@ -295,7 +292,6 @@ function getLineAverage(bm, p1, p2) {
     var lineFunc;
     if(dx == 0) {
         stepY = true;
-        console.log("GOT 1");
         lineFunc = function(y) {
             return p1.x;
         };
@@ -303,13 +299,11 @@ function getLineAverage(bm, p1, p2) {
         a = dy / dx;
         b = p1.y - a * p1.x;
         if(Math.abs(a) > 1) {
-        console.log("GOT 2");
             stepY = true;
             lineFunc = function(y) {
                 return Math.round((y - b) / a);
             }
         } else {
-        console.log("GOT 3");
             lineFunc = function(x) {
                 return Math.round(a * x + b);
             }
@@ -353,6 +347,36 @@ function getLineAverage(bm, p1, p2) {
     return avg / count;
 }
 
+// check if this is actually a dotted line
+// by sampling along the line
+// and return corrected line that is closer
+// to running through the middle of squares
+function verifyDottedLine(bm, p1, p2) {
+
+    var globAvg = getLineAverage(bm, p1, p2);
+    var incX = Math.abs(p2.x - p1.x) / 12;
+    var incY = Math.abs(p2.y - p1.y) / 12;
+    var minX = Math.min(p1.x, p2.x);
+    var minY = Math.min(p1.y, p2.y);
+    var curX, curY;
+    var values = [];
+    var i, avg;
+    for(i=0; i < 12; i++) {
+        curX = Math.round(minX + incX * i + incX/2);
+        curY = Math.round(minY + incY * i + incY/2);
+        avg = getSquareColor(bm, curX, curY);
+        if(avg > globAvg) {
+            values.push(false);
+        } else {
+            values.push(true);
+        }
+    }
+    
+    console.log("Values:", values);
+
+    return {p1: p1, p2: p2};
+}
+
 function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
 
     var diff, p1, p2, avg;
@@ -363,11 +387,14 @@ function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
     p2 = pointSub(lineB.remote, diff);
     diff = pointDiff(lineA.origin, lineA.remote);
     p2 = pointAdd(p2, diff);
-    out.lineA = {p1: p1, p2: p2};
+    
+    p1.x -= 5; // TODO debug 
+    p2.x -= 5;
+    out.lineA = verifyDottedLine(bm, p1, p2);
 
-    drawLine(drawCtx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
-    avg = getLineAverage(bm, p1, p2);
-    console.log("LineA average:", avg);
+    
+
+    drawLine(drawCtx, out.lineA.p1, out.lineA.p2, undefined, 'RGBA(255, 0, 0, 0.1)');
 
     diff = pointDiff(lineA.origin, lineB.origin);
     p1 = pointAdd(lineB.remote, diff);
