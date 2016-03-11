@@ -371,9 +371,21 @@ function verifyDottedLine(bm, p1, p2) {
             values.push(true);
         }
     }
-    
-    console.log("Values:", values);
 
+    var cur, prev;
+    for(i=0; i < values.length; i++) {
+        console.log("GO", values[i]);
+        if(i == 0) {
+            prev = values[i];
+            continue;
+        }
+        cur = values[i];
+        if(cur === prev) {
+            return false;
+        }
+        prev = cur;
+    }
+    
     return {p1: p1, p2: p2};
 }
 
@@ -391,8 +403,9 @@ function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
     p1.x -= 5; // TODO debug 
     p2.x -= 5;
     out.lineA = verifyDottedLine(bm, p1, p2);
-
-    
+    if(!out.lineA) {
+        return false;
+    }
 
     drawLine(drawCtx, out.lineA.p1, out.lineA.p2, undefined, 'RGBA(255, 0, 0, 0.1)');
 
