@@ -39,6 +39,10 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
     ctx.stroke();
 }
 
+function drawPixel(ctx, x, y, color) {
+    ctx.fillStyle = color || 'rgba(0, 255, 0, 0.1)';
+    ctx.fillRect(x, y, 1, 1); 
+}
 
 function drawImageTo(img, ctx, downSize) {
 
@@ -158,46 +162,7 @@ function smallestAngleBetween(lineA, lineB) {
 
     return diff;
 }
-/*
-function lineIntersection(lineA, lineB) {
-    lineA.dy = lineA.y2 - lineA.y1;
-    lineA.dx = lineA.x2 - lineA.x1;
-    lineB.dy = lineB.y2 - lineB.y1;
-    lineB.dx = lineB.x2 - lineB.x1;
 
-    if(lineA.dx == 0 && lineB.dx == 0) {
-        return null;
-    }
-    if(lineA.dx == 0) {
-        lineB.a = lineB.dy / lineB.dx;
-        lineB.b = lineB.y1 / (lineB.a * lineB.x1);
-        return {
-            x: lineA.x1,
-            y: lineB.a * lineA.x1 + lineB.b
-        }
-    }
-    if(lineB.dx == 0) {
-        lineA.a = lineA.dy / lineA.dx;
-        lineA.b = lineA.y1 / (lineA.a * lineA.x1);
-        return {
-            x: lineB.x1,
-            y: lineA.a * lineB.x1 + lineA.b
-        }
-    }
-
-    lineB.a = lineB.dy / lineB.dx;
-    lineB.b = lineB.y1 / (lineB.a * lineB.x1);    
-    lineA.a = lineA.dy / lineA.dx;
-    lineA.b = lineA.y1 / (lineA.a * lineA.x1);
-
-    var ret = {};
-
-    ret.x = (lineB.b - lineA.b) / (lineA.a - lineB.a);
-    ret.y = lineA.a * ret.x + lineA.b;
-
-    return ret;
-}
-*/
 // find the datamatrix L shape from the lines detected by LSD
 function findL(lines, opts) {
     opts = xtend({
@@ -268,8 +233,11 @@ function pointSub(p1, p2) {
 // * an x,y position of the center of the square
 // * the average pixel value of the general area being sampled
 // Returns the average of the sampled pixels
-function getSquareColor(bm, x, y) {
+function getSquareColor(drawCtx, bm, x, y, debug) {
     var avg = 0;
+
+    // ToDo change to center-weighted
+
     avg += bm.get(x, y);
     avg += bm.get(x+1, y);
     avg += bm.get(x, y+1);
@@ -279,6 +247,19 @@ function getSquareColor(bm, x, y) {
     avg += bm.get(x+1, y-1);
     avg += bm.get(x-1, y+1);
     avg += bm.get(x-1, y-1);
+
+    if(debug) {
+        drawPixel(drawCtx, x, y);
+        drawPixel(drawCtx, x+1, y);
+        drawPixel(drawCtx, x, y+1);
+        drawPixel(drawCtx, x-1, y);
+        drawPixel(drawCtx, x, y-1);
+        drawPixel(drawCtx, x+1, y+1);
+        drawPixel(drawCtx, x+1, y-1);
+        drawPixel(drawCtx, x-1, y+1);
+        drawPixel(drawCtx, x-1, y-1);
+    }
+
     avg = avg / 9;
     return avg;
 }
@@ -347,24 +328,155 @@ function getLineAverage(bm, p1, p2) {
     return avg / count;
 }
 
+
+// Move a point a specified distance
+// along the direction of a line
+// The distance is specified as a ratio of the length of the line.
+function moveAlong(point, dist, lineP1, lineP2) {
+    var dy = lineP2.y - lineP1.y;
+    var dx = lineP2.x - lineP1.x;
+
+    point.y += dist * dy;
+    point.x += dist * dx;
+
+    return point;
+}
+
 // check if this is actually a dotted line
 // by sampling along the line
 // and return corrected line that is closer
 // to running through the middle of squares
-function verifyDottedLine(bm, p1, p2) {
-
+function verifyDottedLine(drawCtx, bm, p1, p2) {
     var globAvg = getLineAverage(bm, p1, p2);
+
+    var cur = xtend(p1, {});
+    var end = xtend(p2, {});
+    var dy = end.y - cur.y;
+    var dx = end.x - cur.x;
+
+    var tmp;
+    var one = 1;
+    var halfPart;
+    var inc;
+    if(dy == 0) {
+        if(end.x < cur.x) {
+            tmp = end;
+            end = cur;
+            cur = tmp;
+        }
+        halfPart = dx / 24;
+        cur.x +=  halfPart;
+        end.x -=  halfPart;
+        inc = function(p) {
+            p.x++;
+            if(p.x > end.x) return false;
+            return p;
+        }
+    } else if (dx == 0) {
+        if(end.y < cur.y) {
+            tmp = end;
+            end = cur;
+            cur = tmp;
+        }
+        halfPart = dy / 24;
+        cur.y +=  halfPart;
+        end.y -=  halfPart;
+        inc = function(p) {
+            p.y++;
+            if(p.y > end.y) return false;
+            return p;
+        }        
+    } else {
+        var a = dy / dx;
+        var b = p1.y - a * p1.x;
+        if(Math.abs(dy) <= Math.abs(dx)) {
+            if(end.x < cur.x) {
+                tmp = end;
+                end = cur;
+                cur = tmp;
+            }
+            halfPart = dx / 24;
+            cur.x +=  halfPart;
+            end.x -=  halfPart;
+            inc = function(p) {
+                p.x++;
+                if(p.x > end.x) return false;
+                p.y = a * p.x + b;
+                return p;
+            }
+        } else {
+            if(end.y < cur.y) {
+                tmp = end;
+                end = cur;
+                cur = tmp;
+            }
+            halfPart = dy / 24;
+            cur.y +=  halfPart;
+            end.y -=  halfPart;
+            inc = function(p) {
+                p.y++;
+                if(p.y > end.y) return false;
+                p.x = (p.y - b) / a;
+                return p;
+            }
+        }
+    }
+
+    var values = [];
+
+    var sample;
+    var bit;
+    var last;
+    do {
+        sample = getSquareColor(drawCtx, bm, Math.round(cur.x), Math.round(cur.y));
+        bit = (sample > globAvg) ? false : true;
+        if(bit !== last) {
+
+            values.push({value: bit, point: xtend(cur, {})});
+            distSinceLast = 0;
+        } else {
+            distSinceLast++;
+        }
+        last = bit;
+    } while(inc(cur));
+
+
+    if(values.length != 12) {
+//        return false;
+    }
+
+    drawPixel(drawCtx, prev.point.x, prev.point.y, 'RGBA(255, 0, 0, 1)');
+
+    var i, prev;
+    for(i=2; i < values.length; i++) {
+        cur = values[i];
+        prev = values[i-1];
+        
+        prev.point.x += (cur.point.x - prev.point.x) / 2;
+        prev.point.y += (cur.point.y - prev.point.y) / 2;
+        
+        drawPixel(drawCtx, prev.point.x, prev.point.y, 'RGBA(255, 0, 0, 1)');
+    }
+
+    console.log("values:", values.length);
+
+    return false;
+
+    // ------------------------------------------------
+/*
+
     var incX = Math.abs(p2.x - p1.x) / 12;
     var incY = Math.abs(p2.y - p1.y) / 12;
     var minX = Math.min(p1.x, p2.x);
     var minY = Math.min(p1.y, p2.y);
+
     var curX, curY;
     var values = [];
     var i, avg;
     for(i=0; i < 12; i++) {
         curX = Math.round(minX + incX * i + incX/2);
         curY = Math.round(minY + incY * i + incY/2);
-        avg = getSquareColor(bm, curX, curY);
+        avg = getSquareColor(drawCtx, bm, curX, curY);
         if(avg > globAvg) {
             values.push(false);
         } else {
@@ -374,7 +486,6 @@ function verifyDottedLine(bm, p1, p2) {
 
     var cur, prev;
     for(i=0; i < values.length; i++) {
-        console.log("GO", values[i]);
         if(i == 0) {
             prev = values[i];
             continue;
@@ -387,6 +498,62 @@ function verifyDottedLine(bm, p1, p2) {
     }
     
     return {p1: p1, p2: p2};
+*/
+}
+
+// find the outer edge of the dotted line
+function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
+    var line;
+    p1 = xtend(p1Orig, {});
+    p2 = xtend(p2Orig, {});
+
+    var validStart;
+    var validEnd;
+
+    // 1/96 is one 1/8th of a square "pixel" in the pattern
+    // since a line is 12 squares long
+    var stepSize = 1/96;
+
+    // We're starting with a line that's probably at the edge of the dotted lines.
+    // Now we'll slide that line back and forth along the axis of 
+    // the other dotted line and log where alternating dot patter begins and ends.
+    // This will allow us to find the center of the dotted line.
+
+    p1 = moveAlong(p1, -stepSize*14, lineP1, lineP2);
+    p2 = moveAlong(p2, -stepSize*14, lineP1, lineP2);    
+    var i;
+    for(i=0; i < 28; i++) {
+        p1 = moveAlong(p1, stepSize, lineP1, lineP2);
+        p2 = moveAlong(p2, stepSize, lineP1, lineP2);
+
+        drawLine(drawCtx, p1, p2, 1, 'RGBA(0, 128, 128, 0.3)');
+
+        line = verifyDottedLine(drawCtx, bm, p1, p2);
+        return;
+        if(line) {
+            if(!validStart) {
+                validStart = i;
+            }
+            validEnd = i;
+            drawLine(drawCtx, p1, p2, 1, 'RGBA(128, 128, 0, 0.3)');
+        }
+    }
+
+    var stepsToMiddle = Math.round((validStart + validEnd) / 2);
+
+    p1 = moveAlong(p1Orig, -stepSize*16 + stepSize*stepsToMiddle, lineP1, lineP2);
+    p2 = moveAlong(p2Orig, -stepSize*16 + stepSize*stepsToMiddle, lineP1, lineP2);
+
+    drawLine(drawCtx, p1, p2, 1, 'RGBA(0, 0, 255, 0.5)');  
+  
+    return {p1: p1, p2: p2};
+}
+
+// sample the pattern and return a 10x10 bit matrix
+// the startpoint is the middle of the square where the two dotted lines intersect
+// lineA and lineB are the two dotted lines
+function samplePattern(startPoint, lineA, lineB) {
+
 }
 
 function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
@@ -399,15 +566,13 @@ function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
     p2 = pointSub(lineB.remote, diff);
     diff = pointDiff(lineA.origin, lineA.remote);
     p2 = pointAdd(p2, diff);
-    
-    p1.x -= 5; // TODO debug 
-    p2.x -= 5;
-    out.lineA = verifyDottedLine(bm, p1, p2);
-    if(!out.lineA) {
+
+    out.lineA = findDottedLineCenter(drawCtx, bm, p1, p2, lineA.origin, lineA.remote);
+     if(!out.lineA) {
         return false;
     }
 
-    drawLine(drawCtx, out.lineA.p1, out.lineA.p2, undefined, 'RGBA(255, 0, 0, 0.1)');
+//    drawLine(drawCtx, out.lineA.p1, out.lineA.p2, undefined, 'RGBA(255, 0, 0, 0.1)');
 
     diff = pointDiff(lineA.origin, lineB.origin);
     p1 = pointAdd(lineB.remote, diff);
@@ -416,9 +581,15 @@ function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
     p2 = pointAdd(p2, diff);
     out.lineB = {p1: p1, p2: p2};
 
-    drawLine(drawCtx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
-    avg = getLineAverage(bm, p1, p2);
-    console.log("LineB average:", avg);
+    out.lineB = findDottedLineCenter(drawCtx, bm, p1, p2, lineB.origin, lineB.remote);
+     if(!out.lineB) {
+        return false;
+    }
+  
+
+//    drawLine(drawCtx, p1, p2, undefined, 'RGBA(255, 0, 0, 0.1)');
+//    avg = getLineAverage(bm, p1, p2);
+//    console.log("LineB average:", avg);
     
 
 }
@@ -476,8 +647,6 @@ function run() {
     var i, c;
     for(i=0; i < candidates.length; i++) {
         c = candidates[i];
-//        console.log("lCandidate lineA:", JSON.stringify(c.lineA));
-//        console.log("lCandidate lineB:", JSON.stringify(c.lineB));
         drawLine(detectCtx, c.lineA);
         drawLine(detectCtx, c.lineB);
         findDottedLines(o.bitmatrix, detectCtx, c.lineA, c.lineB);
