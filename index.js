@@ -421,6 +421,7 @@ function verifyDottedLine(drawCtx, bm, p1, p2) {
             }
         }
     }
+    drawPixel(drawCtx, cur.x, cur.y, 'RGBA(255, 0, 0, 1)');
 
     var values = [];
 
@@ -445,7 +446,7 @@ function verifyDottedLine(drawCtx, bm, p1, p2) {
 //        return false;
     }
 
-    drawPixel(drawCtx, prev.point.x, prev.point.y, 'RGBA(255, 0, 0, 1)');
+    drawPixel(drawCtx, end.x, end.y, 'RGBA(255, 0, 0, 1)');
 
     var i, prev;
     for(i=2; i < values.length; i++) {
