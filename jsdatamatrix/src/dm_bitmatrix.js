@@ -38,6 +38,7 @@ function BitMatrix(image, opts) {
         this.height = height;
 
         var canvas;
+        console.trace(image);
         if(image.tagName !== 'CANVAS') {
             if(!document) {
                 canvas = new Canvas(width, height);

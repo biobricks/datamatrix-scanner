@@ -13,9 +13,18 @@
         border: 1px solid black;
       }
 
-      #detect, #debug {
+      #detect, #debug, #debugCanvas {
         float: left;
         border: 1px solid black;
+      }
+
+      #detect {
+        position: relative;
+      }
+
+      #debugCanvas {
+        margin-top: -400px;
+        position: relative;
       }
     </style>
   </head>
@@ -26,6 +35,7 @@
     <canvas id="debug" width="400" height="400"></canvas>
     
     <canvas id="detect" width="400" height="400"></canvas>
+    <canvas id="debugCanvas" width="400" height="400"></canvas>
 
 
   </body>
