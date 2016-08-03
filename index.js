@@ -130,9 +130,10 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
   ctx.stroke();
 }
 
-function drawPixel(ctx, x, y, color) {
+function drawPixel(ctx, x, y, color, dim) {
+  dim = dim || 2;
   ctx.fillStyle = color || DEFAULT_COLOR;
-  ctx.fillRect(x, y, 2, 2); 
+  ctx.fillRect(x, y, dim, dim); 
 }
 
 function drawImageTo(img, ctx, downSize) {
@@ -253,6 +254,7 @@ function smallestAngleBetween(lineA, lineB) {
   return diff;
 }
 
+
 // find the datamatrix L shape from the lines detected by LSD
 function findL(lines, opts) {
   var d = debugCanvas(opts.ctx.canvas, {
@@ -261,36 +263,27 @@ function findL(lines, opts) {
   });
 
   var minLen = 40;
+  var maxDist = 5;
   var r = [];
   
   function validateAngle(lineA, lineB) {
-    var ap1 = lineA.p1;
-    var ap2 = lineA.p2;
-    var bp1 = lineB.p1;
-    var bp2 = lineB.p2;
+    var originDist = lineA.origin.distance(lineB.origin);
 
-    var dist1 = ap1.distance(bp1);
-    var dist2 = ap2.distance(bp2);
+    if(originDist < maxDist) {
+      //drawLine(d, lineA.p1, lineB.p1, 1, "pink");
+      //drawLine(d, lineA.p1, lineB.p2, 2, "pink");
+      //drawLine(d, lineB.p1, lineA.p1, 1, "pink");
+      drawLine(d, lineB.p1, lineB.p2, 3, "rgba(255, 0, 0, 0.5)");
+      drawLine(d, lineA.p1, lineA.p2, 3, "rgba(0, 0, 255, 0.5)");
 
-    if(dist1 < 20 || dist2 < 20) {
-      var p12 = Math.pow(lenA, 2);
-      var p13 = Math.pow(lenB, 2);
-      var p23 = Math.pow(ap2.distance(bp2), 2);
+      var relAngle = smallestAngleBetween(lineA, lineB);
 
-      var a2 = Math.abs(Math.atan2(ap2.y - ap1.y, ap2.x - ap1.x) - Math.atan2(bp2.y - ap1.y, bp2.x - ap1.x));
-      var a = Math.acos((p12 + p13 - p23) / (2 * p12 * p13));
-
-        drawPixel(d, ap1.x, ap1.y, "yellow");
-        drawPixel(d, ap2.x, ap2.y, "red");
-        drawPixel(d, bp1.x + 2, bp1.y - 2, "yellow");
-        drawPixel(d, bp2.x + 2, bp2.y - 2, "red");
-
-      if(a > 1.5705 && a < 1.5706) {
+      if(relAngle > 1.4 && relAngle < 1.6) {
+        drawLine(d, lineB.remote, lineA.remote, 1, "pink");
         return true;
       }
     }
 
-        return true;
     return false;
   }
 
@@ -319,6 +312,11 @@ function findL(lines, opts) {
       // try to discard this earlier
       if(lenB < minLen) continue;
 
+      setEndPoints(lineA, lineB);
+
+      drawPixel(d, lineA.origin.x + (Math.random() * 5), lineA.origin.y + (Math.random() * 5), "rgba(0,255,0,0.5)", 5);
+      drawPixel(d, lineA.remote.x, lineA.remote.y, "rgba(255,255,0,0.5)", 5);
+
       if(validateAngle(lineA, lineB)) {
         r.push({
           lineA: lineA,
@@ -329,6 +327,26 @@ function findL(lines, opts) {
   }
 
   return r;
+}
+
+function setEndPoints(lineA, lineB) {
+  var pairs = ([
+    [ lineA.p1, lineB.p1 ],
+    [ lineA.p1, lineB.p2 ],
+    [ lineA.p2, lineB.p1 ],
+    [ lineA.p2, lineB.p2 ]
+  ]).sort(function(a, b) {
+    a[2] = a[0].distance(a[1]);
+    b[2] = b[0].distance(b[1]);
+    return a[2] > b[2];
+  });
+
+  // origin points based on closest in caparative lines
+  lineA.origin = pairs[0][0];
+  lineB.origin = pairs[0][1];
+
+  lineA.remote = lineA.origin === lineA.p1 ? lineA.p2 : lineA.p1;
+  lineB.remote = lineB.origin === lineB.p1 ? lineB.p2 : lineB.p1;
 }
 
 // difference between two points
@@ -526,10 +544,10 @@ function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
   var diff, p1, p2, avg;
   var out = {};
 
-  diff = pointDiff(lineA.origin, lineB.origin);
-  p1 = pointAdd(lineA.remote, diff);
-  p2 = pointSub(lineB.remote, diff);
-  diff = pointDiff(lineA.origin, lineA.remote);
+  diff = pointDiff(lineA.p1, lineB.p2);
+  p1 = pointAdd(lineA.p2, diff);
+  p2 = pointSub(lineB.p2, diff);
+  diff = pointDiff(lineA.p1, lineA.p2);
   p2 = pointAdd(p2, diff);
 
   out.lineA = findDottedLineCenter(drawCtx, bm, p1, p2, lineA.origin, lineA.remote);
@@ -582,7 +600,7 @@ function run(evt) {
 
     done(null, stack);
   }, function(stack, done) {
-    for(blur=4; blur <= 12; blur+=2) {
+    for(blur=4; blur <= 4; blur+=2) {
 
       var lineDetect = detectLines(stack);
       debugCanvas(lineDetect.canvas, {
@@ -704,7 +722,6 @@ function run(evt) {
       function comp(a, b, prevDist, point) {
         var dist = a.distance(b);
 
-        console.log(dist, prevDist);
         if(prevDist === -1 || dist < prevDist) {
           point.x = a.x;
           point.y = a.y;
