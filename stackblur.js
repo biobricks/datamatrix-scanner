@@ -106,18 +106,17 @@ function stackBlurImage( imageID, canvasID, radius, blurAlphaChannel )
 function stackBlurCanvasRGBA( id, top_x, top_y, width, height, radius )
 {
 	if ( isNaN(radius) || radius < 1 ) return;
-	radius |= 0;
+  radius |= 0;
 
-    var canvas;
-	  if(typeof id === 'string') {
-	      canvas  = document.getElementById( id );
-    } else {
-        console.log("wop wop");
-        canvas = id;
-    }
+  var canvas;
+  if(typeof id === 'string') {
+    canvas  = document.getElementById( id );
+  } else {
+    canvas = id;
+  }
 
-	var context = canvas.getContext("2d");
-	var imageData;
+  var context = canvas.getContext("2d");
+  var imageData;
 	
 	try {
 	  try {

@@ -1,16 +1,97 @@
-var debug = false;
-var $ = window.$ = window.jQuery = require('jquery');
-var xtend = require('xtend');
+var async = require("async");
+var debug = require("debug");
+debug.enable("*");
+debug = debug("bbdm");
+var intersection = require("intersection").intersect;
+var xtend = require("xtend");
+var Vector = require("victor");
 
-//var lsd = require('./line-segment-detector/index.js');
+var $ = document.querySelector.bind(document);
+
+//var lsd = require("./line-segment-detector/index.js");
 var lsd = Module;
 
-var Detector = require('./jsdatamatrix/src/dm_detector.js');
-var BitMatrix = require('./jsdatamatrix/src/dm_bitmatrix.js');
+var Detector = require("./jsdatamatrix/src/dm_detector.js");
+var BitMatrix = require("./jsdatamatrix/src/dm_bitmatrix.js");
 
-var DEFAULT_COLOR = 'rgba(0, 255, 0, 0.3)';
+var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
-var image;
+const STEP = 1 / 100;
+
+function cloneCanvas(oldCanvas, blank) {
+	//create a new canvas
+	var newCanvas = document.createElement('canvas');
+	var context = newCanvas.getContext('2d');
+
+	//set dimensions
+	newCanvas.width = oldCanvas.width;
+	newCanvas.height = oldCanvas.height;
+
+  if(blank !== true) {
+    //apply the old canvas to the new one
+    context.drawImage(oldCanvas, 0, 0);
+  }
+
+	//return the new canvas
+	return newCanvas;
+}
+
+var debugCanvases = [];
+
+function debugCanvas(canvas, opts) {
+  var d = cloneCanvas(canvas, opts.blank);
+  d.className = "debug-canvas";
+
+  var div = document.createElement("div");
+  document.querySelector(".canvas-layers").appendChild(div);
+
+  $(".canvas-box").appendChild(d);
+  debugCanvases.push(d);
+
+  var input = document.createElement("input");
+  input.checked = opts.display === false ? false : true;
+
+  input.type = "checkbox";
+  input.addEventListener("change", function(evt) {
+    d.style.setProperty("display", evt.target.checked ? "block" : "none");
+  });
+  d.style.setProperty("display", input.checked ? "block" : "none");
+
+
+  div.appendChild(input);
+  if(opts.name) {
+    var label = document.createElement("label");
+    label.textContent = opts.name;
+    div.appendChild(label);
+  }
+
+  return d.getContext("2d");
+}
+
+function traverseLine(p1, p2, opts, cb, done) {
+  if(typeof opts === "function") {
+    done = cb;
+    cb = opts;
+    opts = {
+    };
+  }
+
+  if(!opts.step) opts.step = STEP;
+
+  var dist = pointDist(p1, p2);
+  var vx = p2.x - p1.x;
+  var vy = p2.y - p1.y;
+
+  for(var i = 0; i < dist; i += opts.step) {
+    var d = i / dist;
+    var x = p1.x + (d * vx);
+    var y = p1.y + (d * vy);
+
+    cb(x,y, d);
+  }
+
+  done && done();
+}
 
 function randomColor() {
   return "#" + Math.round(Math.random() * 0xffffff).toString(16);
@@ -21,8 +102,8 @@ function sampleToColor(sample) {
 }
 
 function drawLine(ctx, x1, y1, x2, y2, width, color) {
-  if(typeof x1 === 'object') {
-    if(typeof y1 === 'object') {
+  if(typeof x1 === "object") {
+    if(typeof y1 === "object") {
       // received two point objects
       color = y2;
       width = x2;
@@ -40,7 +121,7 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
       x1 = x1.x1;
     }
   }
-  //    console.log("Drawing:", x1, y1, x2, y2, width, color);
+  //    debug("Drawing:", x1, y1, x2, y2, width, color);
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
@@ -51,7 +132,7 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
 
 function drawPixel(ctx, x, y, color) {
   ctx.fillStyle = color || DEFAULT_COLOR;
-  ctx.fillRect(x, y, 1, 1); 
+  ctx.fillRect(x, y, 2, 2); 
 }
 
 function drawImageTo(img, ctx, downSize) {
@@ -66,12 +147,11 @@ function drawImageTo(img, ctx, downSize) {
 
 }
 
-function detectLines(img, canvas, blur) {
-  var ctx = canvas.getContext('2d');
+function detectLines(stack) {
+  var canvas = cloneCanvas(stack.ctx.canvas);
+  var ctx = canvas.getContext("2d");
 
   var downSize = 400;
-
-  drawImageTo(img, ctx, downSize);
 
   stackBlurCanvasRGBA(canvas, 0, 0, downSize, downSize, blur);
 
@@ -85,21 +165,19 @@ function detectLines(img, canvas, blur) {
   var i, line;
   for(i=0; i < lines.length; i++) {
     line = lines[i];
-    line.p1 = {x: line.x1, y: line.y1};
-    line.p2 = {x: line.x2, y: line.y2};
-
-    //drawLine(ctx, line.x1, line.y1, line.x2, line.y2, undefined, "red");
+    line.p1 = new Vector(line.x1, line.y1);
+    line.p2 = new Vector(line.x2, line.y2);
   }
 
-  return {lines: lines, bitmatrix: bm};
-}
-
-function pointDist(p1, p2) {
-  return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+  return {lines: lines, bitmatrix: bm, canvas: canvas};
 }
 
 function dist(x1, y1, x2, y2) {
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+}
+
+function pointDist(p1, p2) {
+  return dist(p1.x, p1.y, p2.x, p2.y);
 }
 
 function lineLength(line) {
@@ -177,50 +255,80 @@ function smallestAngleBetween(lineA, lineB) {
 
 // find the datamatrix L shape from the lines detected by LSD
 function findL(lines, opts) {
-  opts = xtend({
-    maxLineStartDistance: 15, // max distance between L line starting points
-    angleMin: 75, // minimum angle of smallest angle between L lines
-    maxLineLengthDifference: 0.15, // max length difference between L lines
-    lineMinLength: 50 // minimum L line length
-  }, opts || {});
+  var d = debugCanvas(opts.ctx.canvas, {
+    blank: true,
+    name: "findL"
+  });
 
-  opts.angleMin = opts.angleMin * (Math.PI / 180);
+  var minLen = 40;
+  var r = [];
+  
+  function validateAngle(lineA, lineB) {
+    var ap1 = lineA.p1;
+    var ap2 = lineA.p2;
+    var bp1 = lineB.p1;
+    var bp2 = lineB.p2;
 
-  var i, j, line, lineA, lineB, len;
+    var dist1 = ap1.distance(bp1);
+    var dist2 = ap2.distance(bp2);
 
-  // filter lines
-  var fLines = [];
-  for(i=0; i < lines.length; i++) {
-    line = lines[i];
-    len = lineLength(line);
-    if(len >= opts.lineMinLength) {
-      line.length = len;
-      fLines.push(line);
+    if(dist1 < 20 || dist2 < 20) {
+      var p12 = Math.pow(lenA, 2);
+      var p13 = Math.pow(lenB, 2);
+      var p23 = Math.pow(ap2.distance(bp2), 2);
+
+      var a2 = Math.abs(Math.atan2(ap2.y - ap1.y, ap2.x - ap1.x) - Math.atan2(bp2.y - ap1.y, bp2.x - ap1.x));
+      var a = Math.acos((p12 + p13 - p23) / (2 * p12 * p13));
+
+        drawPixel(d, ap1.x, ap1.y, "yellow");
+        drawPixel(d, ap2.x, ap2.y, "red");
+        drawPixel(d, bp1.x + 2, bp1.y - 2, "yellow");
+        drawPixel(d, bp2.x + 2, bp2.y - 2, "red");
+
+      if(a > 1.5705 && a < 1.5706) {
+        return true;
+      }
+    }
+
+        return true;
+    return false;
+  }
+
+  for(var i = 0; i < lines.length; i++) {
+    var lineA = lines[i];
+    var lenA = lineA.p1.distance(lineA.p2);
+    lineA.length = lenA;
+
+    // try to discard this earlier
+    if(lenA < minLen) continue;
+
+    for(var j = 0; j < lines.length; j++) {
+      var lineB = lines[j];
+
+      if(lineA === lineB) continue;
+      if(
+          lineA.p1.x === lineB.p1.x ||
+          lineA.p1.y === lineB.p1.y ||
+          lineA.p2.x === lineB.p2.x ||
+          lineA.p2.y === lineB.p2.y
+        ) continue;
+
+      var lenB = lineB.p1.distance(lineB.p2);
+      lineB.length = lenB;
+
+      // try to discard this earlier
+      if(lenB < minLen) continue;
+
+      if(validateAngle(lineA, lineB)) {
+        r.push({
+          lineA: lineA,
+          lineB: lineB
+        });
+      }
     }
   }
 
-  var distRes;
-  var lCandidates = [];
-  for(i=0; i < fLines.length; i++) {
-    lineA = fLines[i];
-    for(j=i+1; j < fLines.length; j++) {
-      lineB = fLines[j];
-      if(Math.abs(lineA.length - lineB.length) / ((lineA.length + lineB.length) / 2) > opts.maxLineLengthDifference) {
-        continue;
-      }
-
-      if(minEndPointDistance(lineA, lineB) > opts.maxLineStartDistance) {
-        continue;
-      }
-
-      if(smallestAngleBetween(lineA, lineB) < opts.angleMin) {
-        continue;
-      }
-
-      lCandidates.push({lineA: lineA, lineB: lineB});
-    }
-  }
-  return lCandidates;
+  return r;
 }
 
 // difference between two points
@@ -260,20 +368,6 @@ function getSquareColor(drawCtx, bm, x, y) {
   avg += bm.get(x-1, y+1);
   avg += bm.get(x-1, y-1);
 
-  /*
-     if(debug) {
-     drawPixel(drawCtx, x, y);
-     drawPixel(drawCtx, x+1, y);
-     drawPixel(drawCtx, x, y+1);
-     drawPixel(drawCtx, x-1, y);
-     drawPixel(drawCtx, x, y-1);
-     drawPixel(drawCtx, x+1, y+1);
-     drawPixel(drawCtx, x+1, y-1);
-     drawPixel(drawCtx, x-1, y+1);
-     drawPixel(drawCtx, x-1, y-1);
-     }
-     */
-
   avg = avg / 9;
   return avg;
 }
@@ -292,7 +386,7 @@ function moveAlong(point, dist, lineP1, lineP2) {
 }
 
 function toGrayscale(imageData, method) {
-  //console.log("toGrayscale(" + [ imageData.width, imageData.height ] + ") " + imageData.data.length);
+  //debug("toGrayscale(" + [ imageData.width, imageData.height ] + ") " + imageData.data.length);
 	var grayscale = new Array(imageData.width * imageData.height);
 
 	var data = imageData.data;
@@ -337,17 +431,9 @@ function getLineAverage(ctx, p1, p2) {
 		y = Math.round(p1.y + (i / diff)  * diffY) - 1;
 
 		sum += Math.round(grayscale[y * ctx.canvas.width + x]);
-    //if(grayscale[y * ctx.canvas.width + x] < 50)
-    //drawPixel(ctx, x, y, "yellow");
 	}
 
 	average = Math.round(sum / diff);
-
-  if(average > 127 && average < 175) {
-   // drawLine(ctx, p1, p2, undefined, "rgba(" + average +", 0, 0, .5)");
-  } else {
-    //drawLine(ctx, p1, p2, undefined, "rgba(0, 0, 255, .5)");
-  }
 
 	return average;
 }
@@ -355,12 +441,12 @@ function getLineAverage(ctx, p1, p2) {
 // check if this is actually a dotted line
 // by sampling along the line
 //
-// *NOT TRUE \/* This only check IF it's dotted
+// *NOT TRUE \/* This only check IF it"s dotted
 // and return corrected line that is closer
 // to running through the middle of squares
 function verifyDottedLine(drawCtx, bm, p1, p2) {
   var average = getLineAverage(drawCtx, p1, p2);
-  console.log("Line average: %s", average);
+  //debug("Line average: %s", average);
 
   if(average < 110)
     return true;
@@ -371,8 +457,8 @@ function verifyDottedLine(drawCtx, bm, p1, p2) {
 // find the outer edge of the dotted line
 function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   var line;
-  p1 = xtend({}, p1Orig, {});
-  p2 = xtend({}, p2Orig, {});
+  var p1 = new Vector(p1Orig.x, p1Orig.y);
+  var p2 = new Vector(p2Orig.x, p2Orig.y);
 
   var validStart = [];
   var validEnd = [];
@@ -381,24 +467,19 @@ function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   // since a line is 12 squares long
   var stepSize = 1/96;
 
-  // We're starting with a line that's probably at the edge of the dotted lines.
-  // Now we'll slide that line back and forth along the axis of 
+  // We"re starting with a line that"s probably at the edge of the dotted lines.
+  // Now we"ll slide that line back and forth along the axis of 
   // the other dotted line and log where alternating dot patter begins and ends.
   // This will allow us to find the center of the dotted line.
 
   p1 = moveAlong(p1, -stepSize*10, lineP1, lineP2);
   p2 = moveAlong(p2, -stepSize*10, lineP1, lineP2);    
 
-  drawLine(drawCtx, p1, p2, undefined, 'rgba(0, 255, 0, 1)');
-
   for(var i=0; i < 28; i++) {
     p1 = moveAlong(p1, stepSize, lineP1, lineP2);
     p2 = moveAlong(p2, stepSize, lineP1, lineP2);
 
-    drawLine(drawCtx, p1, p2, undefined, 'rgba(255, 0, 0, ' + (i/28) + ')');
-
     line = verifyDottedLine(drawCtx, bm, p1, p2);
-    drawLine(drawCtx, line, "green");
     if(line) {
       if(validStart.length === 0) {
         validStart = [{
@@ -423,16 +504,10 @@ function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   }
   
   if(validStart.length === 0 || validEnd.length === 0) {
-    console.log("Edges not found");
+    debug("Edges not found");
     return;
   }
-  console.log(validStart, validEnd);
-
-  drawPixel(drawCtx, validStart[0].x, validStart[0].y, "green");
-  drawPixel(drawCtx, validEnd[0].x, validEnd[0].y, "green");
-
-  drawPixel(drawCtx, validStart[1].x, validStart[1].y, "red");
-  drawPixel(drawCtx, validEnd[1].x, validEnd[1].y, "red");
+  debug(validStart, validEnd);
 
   var startX = validStart[0].x;
   var startY = validStart[0].y;
@@ -441,23 +516,11 @@ function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   var endY = validStart[1].y - ((validEnd[0].x - validStart[0].x));
 
   return {
-    p1: {
-      x: startX,
-      y: startY
-    },
-    p2: {
-      x: endX,
-      y: endY
-    }
+    p1: new Vector(startX, startY),
+    p2: new Vector(endX, endY)
   }
 }
 
-// sample the pattern and return a 10x10 bit matrix
-// the startpoint is the middle of the square where the two dotted lines intersect
-// lineA and lineB are the two dotted lines
-function samplePattern(startPoint, lineA, lineB) {
-
-}
 
 function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
   var diff, p1, p2, avg;
@@ -469,117 +532,229 @@ function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
   diff = pointDiff(lineA.origin, lineA.remote);
   p2 = pointAdd(p2, diff);
 
-  //drawLine(drawCtx, p1, p2, undefined, "rgba(0,0,255,0.4)");
   out.lineA = findDottedLineCenter(drawCtx, bm, p1, p2, lineA.origin, lineA.remote);
 
   if(!out.lineA) {
-    console.log("Didn't find dotted line center");
+    debug("Didn't find dotted line center");
     return;
   }
 
-  //drawLine(drawCtx, out.lineA.p1, out.lineA.p2, undefined,  "yellow");
-  drawPixel(drawCtx, out.lineA.p1.x, out.lineA.p1.y, "green");
-  drawPixel(drawCtx, out.lineA.p2.x, out.lineA.p2.y, "red");
   if(!out.lineA) {
-    console.log("Failed to find dotted line center.");
+    debug("Failed to find dotted line center.");
     return false;
   }
-
-  //drawLine(drawCtx, out.lineA.p1, out.lineA.p2, undefined, 'RGBA(255, 0, 0, 0.4)');
 
   diff = pointDiff(lineA.origin, lineB.origin);
   p1 = pointAdd(lineB.remote, diff);
   p2 = pointAdd(lineA.remote, diff);
   diff = pointDiff(lineB.origin, lineB.remote);
   p2 = pointAdd(p2, diff);
-  out.lineB = {p1: p1, p2: p2};
+  out.lineB = {
+    p1: new Vector(p1.x, p1.y),
+    p2: new Vector(p2.x, p2.y)
+  };
 
-  //drawLine(drawCtx, p1, p2, 'rgba(255, 0, 0, 1)');
-  //drawLine(drawCtx, lineB.origin, lineB.remote, p2, 'rgba(255, 0, 0, 1)');
   out.lineB = findDottedLineCenter(drawCtx, bm, p1, p2, lineB.origin, lineB.remote);
-  console.log(out);
-  //drawLine(drawCtx, out.lineB.p1, out.lineB.p2, undefined,  "yellow");
-  drawPixel(drawCtx, out.lineB.p1.x, out.lineB.p1.y, "green");
-  drawPixel(drawCtx, out.lineB.p2.x, out.lineB.p2.y, "red");
 
   return out;
 }
 
-function performanceTest(img, canvas, seconds) {
-  seconds = seconds || 10;
-  var ms = seconds * 1000;
-  var start = (new Date).getTime();
-  var count = 0;
-
-  while(true) {
-    detectLines(img, canvas);
-    count++;
-    if((new Date).getTime() - start >= ms) {
-      break;
-    }
-  }
-  var opsPerSec = count / seconds
-    console.log("Iterations per seconds:", opsPerSec);
+function drawDetectionLines(ctx, lines) {
+  lines.forEach(function(line) {
+    drawLine(ctx, line.p1, line.p2, 1, "green");
+  });
 }
 
+function run(evt) {
+  async.waterfall([function(done) {
+    debug("Setting up stack");
 
-function run() {
+    var canvas = $("#input");
+    var ctx = canvas.getContext("2d");
 
-  var canvas = $('#debug')[0];
-  var img = $('#input')[0];
-  var ctx = canvas.getContext('2d');
+    var stack = {
+      img: evt.path[0],
+      ctx: ctx,
+      grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width))
+    }
 
-  var detect= $('#detect');
-  var detectCtx = detect[0].getContext('2d');
-  drawImageTo(img, detectCtx, 400);
+    drawImageTo(stack.img, stack.ctx, 400);
 
-  var debugCanvas = $("#debugCanvas")[0];
-  var debugCtx = debugCanvas.getContext("2d");
+    done(null, stack);
+  }, function(stack, done) {
+    for(blur=4; blur <= 12; blur+=2) {
 
-  var i = 0;
-  detect.on("mousemove", function(e) {
-    var x = e.offsetX;
-    var y = e.offsetY;
+      var lineDetect = detectLines(stack);
+      debugCanvas(lineDetect.canvas, {
+        display: false,
+        name: "Blur: " + blur
+      });
 
-    var imageData = ctx.getImageData(x, y, 1, 1);
-    //console.log("%c█", "color:rgba(" + imageData.data + ")");
+      var d = debugCanvas(stack.ctx.canvas, {
+        blank: true,
+        name: "Detect Lines (blur: " + blur + ")"
+      });
+
+      drawDetectionLines(d, lineDetect.lines);
+
+      candidates = findL(lineDetect.lines, stack);
+      if(candidates.length > 0) {
+        debug("Found candidates at %s blur level", blur);
+
+        stack.bitmatrix = lineDetect.bm;
+        stack.blur = lineDetect.canvas;
+        stack.candidates = candidates;
+
+        return done(null, stack);
+      }
+    }
+
+    done(new Error("No Canidates Found"));
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Candidates"
+    });
+
+    for(var i = 0; i < stack.candidates.length; i++) {
+      var lineA = stack.candidates[i].lineA;
+      var lineB = stack.candidates[i].lineB;
+      drawLine(d, lineA.p1, lineA.p2, 1, "red");
+      drawLine(d, lineB.p1, lineB.p2, 1, "red");
+    }
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Intersection"
+    });
+
+    stack.dottedLines = [];
+
+    for(i=0; i < stack.candidates.length; i++) {
+      c = stack.candidates[i];
+      stack.dottedLines.push(findDottedLines(stack.bitmatrix, stack.ctx, c.lineA, c.lineB));
+    }
+
+    if(stack.dottedLines.length > 2) {
+      console.warn("Unsure how to handle more than 2 dotted lines");
+    }
+
+    // snap intersection together
+    stack.dottedLines.forEach(function(linePair, idx) {
+      var a = linePair.lineA;
+      var b = linePair.lineB;
+
+      var intersect = intersection({
+        start: {
+          x: a.p1.x,
+          y: a.p1.y
+        },
+        end: {
+          x: a.p2.x,
+          y: a.p2.y
+        }
+      }, {
+        start: {
+          x: b.p1.x,
+          y: b.p1.y
+        },
+        end: {
+          x: b.p2.x,
+          y: b.p2.y
+        }
+      });
+
+      drawPixel(d, intersect.x, intersect.y, "blue");
+
+      // snap lines to intersection
+      if(a.p1.distance(b.p1) > a.p1.distance(b.p2)) {
+        linePair.lineA.p2 = new Vector(intersect.x, intersect.y);
+      }
+
+      if(b.p1.distance(a.p1) > b.p1.distance(a.p2)) {
+        linePair.lineB.p2 = new Vector(intersect.x, intersect.y);
+      }
+    });
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Dotted"
+    });
+
+    for(var i = 0; i < stack.dottedLines.length; i++) {
+      var lineA = stack.dottedLines[i].lineA;
+      var lineB = stack.dottedLines[i].lineB;
+
+      debug("Drawing lineA %s/%s - %s/%s", lineA.p1.x);
+      drawLine(d, lineA.p1, lineA.p2, 1, "rgba(255, 0, 0, 0.5)");
+      debug("Drawing lineB %s/%s - %s/%s", lineB.p1.x, lineB.p1.y, lineB.p2.x, lineB.p2.y)
+      drawLine(d, lineB.p1, lineB.p2, 1, "rgba(255, 0, 0, 0.5)");
+    }
+
+    done(null, stack);
+  }, function(stack, done) {
+    for(var i = 0; i < stack.candidates.length; i++) {
+      var lineA = stack.candidates[i].lineA;
+      var lineB = stack.candidates[i].lineB;
+
+      function comp(a, b, prevDist, point) {
+        var dist = a.distance(b);
+
+        console.log(dist, prevDist);
+        if(prevDist === -1 || dist < prevDist) {
+          point.x = a.x;
+          point.y = a.y;
+          console.log("Updating point @ dist: %s", dist);
+
+          return dist;
+        }
+
+        return prevDist;
+      }
+
+      var distA = -1;
+      var distB = -1;
+
+      stack.dottedLines.forEach(function(line) {
+        var dottedA = line.lineA;
+        var dottedB = line.lineB;
+
+        distA = comp(dottedA.p1, lineA.p1, distA, lineA.p1);
+        distA = comp(dottedA.p1, lineA.p2, distA, lineA.p1);
+        distA = comp(dottedA.p2, lineA.p1, distA, lineA.p2);
+        distA = comp(dottedA.p2, lineA.p2, distA, lineA.p2);
+        distB = comp(dottedB.p1, lineB.p1, distB, lineB.p2);
+        distB = comp(dottedB.p1, lineB.p2, distB, lineB.p2);
+        distB = comp(dottedB.p2, lineB.p1, distB, lineB.p1);
+        distB = comp(dottedB.p2, lineB.p2, distB, lineB.p1);
+      });
+    }
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true
+    });
+
+    var dotted = [
+      stack.dottedLines[0].lineA,
+      stack.dottedLines[0].lineB
+    ];
+
+    done(null, stack);
+  }, function(stack, done) {
+    done(new Error("Implementaion Ends"));
+  }], function(err) {
+    if(err) throw err;
   });
-
-  var o;
-  var blur;
-  var candidates;
-
-	var grayscale = toGrayscale(detectCtx.getImageData(0, 0, detectCtx.canvas.height, detectCtx.canvas.width));
-
-  for(blur=4; blur <= 12; blur+=2) {
-    o = detectLines(img, canvas, blur);
-
-    console.log("Found", o.lines.length, "line segments");
-    /*
-
-       var i, line;
-       for(i=0; i < lines.length; i++) {
-       line = lines[i];
-       console.log("Line:", line);
-       drawLine(ctx, line.x1, line.y1, line.x2, line.y2, line.width);
-       }
-       */
-
-    candidates = findL(o.lines);
-    console.log("For blur:", blur, "Found", candidates.length, "L-shape candidates");
-    if(candidates.length) break;
-  }
+  return;
 
   var i, c, dottedLines;
-  for(i=0; i < candidates.length; i++) {
-    c = candidates[i];
-    dottedLines = findDottedLines(o.bitmatrix, detectCtx, c.lineA, c.lineB);
-
-    if(dottedLines && dottedLines.lineA) break;
-  }
 
   if(!dottedLines) {
-    console.log("Didn't find dotted line");
+    debug("Didn't find dotted line");
     return;
   }
 
@@ -587,7 +762,7 @@ function run() {
   drawLine(debugCtx, c.lineB.p1, c.lineB.p2, 1, "yellow");
 
   drawLine(debugCtx, dottedLines.lineA.p1, dottedLines.lineA.p2, 1, "yellow");
-  drawLine(debugCtx, dottedLines.lineB.p1, dottedLines.lineB.p2, 1, "yellow");
+  drawLine(debugCtx, dottedLines.lineB.p1, dottedLines.lineB.p2, 1, "blue");
 
   var rect = {
     x: c.lineA.p2.x,
@@ -596,6 +771,15 @@ function run() {
     height: pointDist(c.lineA.p2, dottedLines.lineB.p1)
   };
 
+  traverseLine(dottedLines.lineB.p1, dottedLines.lineA.p2, {
+    step: .5
+  }, function(x, y, i) {
+    drawPixel(debugCtx, x, y, "rgba(255, 0, 0, " + i + ")");
+  }, function() {
+
+  });
+
+  return;
   debugCtx.fillStyle = "rgba(128, 0, 128, 0.5)";
   debugCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
   debugCtx.fill();
@@ -611,12 +795,9 @@ function run() {
   }
 }
 
-
-function main() {
-  image = $('#input')[0];
-  image.onload = run;
-  image.src = 'samples/sample1.jpg';
-  //image.src = 'samples/plate1_cropped.jpg';
-}
-
-$(document).ready(main);
+var sample = "samples/" + (window.location.hash.length > 1 ? window.location.hash.slice(1) : "sample1.jpg");
+var image = document.createElement("img");
+image.onload = run;
+image.src = sample;
+//image.src = "samples/sample1.jpg";
+//image.src = "samples/plate1_cropped.jpg";
