@@ -227,14 +227,7 @@ function minEndPointDistance(lineA, lineB) {
 function lineAngle(line) {
   line.dy = line.y2 - line.y1;
   line.dx = line.x2 - line.x1;
-  if(line.dx == 0) {
-    line.angle = Math.PI * 1/4;
-  } else {
-    line.angle = Math.atan(line.dy / line.dx);
-  }
-  if(line.angle < 0) {
-    return Math.abs(line.angle) + Math.PI * 1/4;
-  }
+  line.angle = Math.atan(line.dy / line.dx);
 
   return line.angle;
 }
