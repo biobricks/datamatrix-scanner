@@ -257,6 +257,7 @@ function findL(lines, opts) {
 
   var minLen = 40;
   var maxDist = 5;
+  var maxLineDiff = 40;
   var r = [];
   
   function validateAngle(lineA, lineB) {
@@ -290,6 +291,7 @@ function findL(lines, opts) {
 
     for(var j = 0; j < lines.length; j++) {
       var lineB = lines[j];
+      if(lineA === lineB) continue;
 
       if(lineA === lineB) continue;
       if(
@@ -304,6 +306,8 @@ function findL(lines, opts) {
 
       // try to discard this earlier
       if(lenB < minLen) continue;
+
+      if(Math.abs(lineA.length - lineB.length) > maxLineDiff) continue;
 
       setEndPoints(lineA, lineB);
 
