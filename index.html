@@ -7,13 +7,14 @@
     <script src="stackblur.js"></script>
     <style type="text/css">
       img, canvas, .canvas-box {
-        height: 400px;
-        width: 400px;
+        height: 500px;
+        width: 500px;
       }
 
       .canvas-box {
         float: left;
         position: relative;
+        width: 80%;
       }
 
       .canvas-box canvas {
@@ -22,8 +23,12 @@
       }
 
       .canvas-layers {
+        background-color: gray;
         float: left;
-        height: 400px;
+        height: 500px;
+        position: absolute;
+        right: 0;
+        width: 20%;
       }
 
       .canvas-layers label {
@@ -34,7 +39,7 @@
   </head>
   <body>
     <div class="canvas-box">
-      <canvas id="input" width="400" height="400"></canvas>
+      <canvas id="input" width="500" height="500"></canvas>
     </div>
     <div class="canvas-layers"></div>
 

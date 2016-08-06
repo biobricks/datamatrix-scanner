@@ -11,6 +11,8 @@ var $ = document.querySelector.bind(document);
 //var lsd = require("./line-segment-detector/index.js");
 var lsd = Module;
 
+var downSize = 400;
+
 var Detector = require("./jsdatamatrix/src/dm_detector.js");
 var BitMatrix = require("./jsdatamatrix/src/dm_bitmatrix.js");
 
@@ -18,7 +20,9 @@ var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
 const STEP = 1 / 100;
 
-function cloneCanvas(oldCanvas, blank) {
+function cloneCanvas(oldCanvas, opts) {
+  opts = (opts || {});
+
 	//create a new canvas
 	var newCanvas = document.createElement('canvas');
 	var context = newCanvas.getContext('2d');
@@ -27,9 +31,17 @@ function cloneCanvas(oldCanvas, blank) {
 	newCanvas.width = oldCanvas.width;
 	newCanvas.height = oldCanvas.height;
 
-  if(blank !== true) {
+  if(opts.blank !== true) {
     //apply the old canvas to the new one
+    if(opts.preDraw) {
+      opts.preDraw(context);
+    }
+
     context.drawImage(oldCanvas, 0, 0);
+
+    if(opts.postDraw) {
+      opts.postDraw(context);
+    }
   }
 
 	//return the new canvas
@@ -39,7 +51,7 @@ function cloneCanvas(oldCanvas, blank) {
 var debugCanvases = [];
 
 function debugCanvas(canvas, opts) {
-  var d = cloneCanvas(canvas, opts.blank);
+  var d = cloneCanvas(canvas, opts);
   d.className = "debug-canvas";
 
   var div = document.createElement("div");
@@ -82,12 +94,16 @@ function traverseLine(p1, p2, opts, cb, done) {
   var vx = p2.x - p1.x;
   var vy = p2.y - p1.y;
 
-  for(var i = 0; i < dist; i += opts.step) {
+  for(var i = 0, broke = false; !broke && i < dist; i += opts.step) {
     var d = i / dist;
     var x = p1.x + (d * vx);
     var y = p1.y + (d * vy);
 
-    cb(x,y, d);
+    cb.call({
+      break: function() {
+        broke = true;
+      }
+    }, x, y, d);
   }
 
   done && done();
@@ -152,8 +168,6 @@ function detectLines(stack) {
   var canvas = cloneCanvas(stack.ctx.canvas);
   var ctx = canvas.getContext("2d");
 
-  var downSize = 400;
-
   stackBlurCanvasRGBA(canvas, 0, 0, downSize, downSize, blur);
 
   var bm = new BitMatrix(canvas, {grayscale: true});
@@ -185,48 +199,9 @@ function lineLength(line) {
   return dist(line.x1, line.y1, line.x2, line.y2);
 }
 
-function minEndPointDistance(lineA, lineB) {
-  var val;
-  var min = 1000000;
-
-  val = pointDist(lineA.p1, lineB.p1);
-  if(val < min) {
-    min = val;
-    lineA.origin = lineA.p1;
-    lineA.remote = lineA.p2;
-    lineB.origin = lineA.p1;
-    lineB.remote = lineA.p2;
-  }
-  val = pointDist(lineA.p1, lineB.p2);
-  if(val < min) {
-    min = val;
-    lineA.origin = lineA.p1;
-    lineA.remote = lineA.p2;
-    lineB.origin = lineB.p2;
-    lineB.remote = lineB.p1;
-  }
-  val = pointDist(lineA.p2, lineB.p2);
-  if(val < min) {
-    min = val;
-    lineA.origin = lineA.p2;
-    lineA.remote = lineA.p1;
-    lineB.origin = lineB.p2;
-    lineB.remote = lineB.p1;
-  }
-  val = pointDist(lineA.p2, lineB.p1);
-  if(val < min) {
-    min = val;
-    lineA.origin = lineA.p2;
-    lineA.remote = lineA.p1;
-    lineB.origin = lineB.p1;
-    lineB.remote = lineB.p2;
-  }
-  return min;
-}
-
 function lineAngle(line) {
-  line.dy = line.y2 - line.y1;
   line.dx = line.x2 - line.x1;
+  line.dy = line.y2 - line.y1;
   line.angle = Math.atan(line.dy / line.dx);
 
   return line.angle;
@@ -257,7 +232,7 @@ function findL(lines, opts) {
 
   var minLen = 40;
   var maxDist = 5;
-  var maxLineDiff = 40;
+  var maxLineDiff = 10;
   var r = [];
   
   function validateAngle(lineA, lineB) {
@@ -291,6 +266,7 @@ function findL(lines, opts) {
 
     for(var j = 0; j < lines.length; j++) {
       var lineB = lines[j];
+      if(j === i) continue;
       if(lineA === lineB) continue;
 
       if(lineA === lineB) continue;
@@ -311,9 +287,6 @@ function findL(lines, opts) {
 
       setEndPoints(lineA, lineB);
 
-      drawPixel(d, lineA.origin.x + (Math.random() * 5), lineA.origin.y + (Math.random() * 5), "rgba(0,255,0,0.5)", 5);
-      drawPixel(d, lineA.remote.x, lineA.remote.y, "rgba(255,255,0,0.5)", 5);
-
       if(validateAngle(lineA, lineB)) {
         r.push({
           lineA: lineA,
@@ -324,6 +297,10 @@ function findL(lines, opts) {
   }
 
   return r;
+}
+
+function averagePoints(p1, p2) {
+  return new Vector((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
 }
 
 function setEndPoints(lineA, lineB) {
@@ -339,11 +316,13 @@ function setEndPoints(lineA, lineB) {
   });
 
   // origin points based on closest in caparative lines
+  var averageOrigin = averagePoints(pairs[0][0], pairs[0][1]);
+
   lineA.origin = pairs[0][0];
   lineB.origin = pairs[0][1];
 
-  lineA.remote = lineA.origin === lineA.p1 ? lineA.p2 : lineA.p1;
-  lineB.remote = lineB.origin === lineB.p1 ? lineB.p2 : lineB.p1;
+  lineA.remote = (lineA.origin === lineA.p1) ? lineA.p2 : lineA.p1;
+  lineB.remote = (lineB.origin === lineB.p1) ? lineB.p2 : lineB.p1;
 }
 
 // difference between two points
@@ -593,7 +572,7 @@ function run(evt) {
       grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width))
     }
 
-    drawImageTo(stack.img, stack.ctx, 400);
+    drawImageTo(stack.img, stack.ctx, downSize);
 
     done(null, stack);
   }, function(stack, done) {
@@ -601,7 +580,7 @@ function run(evt) {
 
       var lineDetect = detectLines(stack);
       debugCanvas(lineDetect.canvas, {
-        display: false,
+        //display: false,
         name: "Blur: " + blur
       });
 
@@ -628,15 +607,80 @@ function run(evt) {
   }, function(stack, done) {
     var d = debugCanvas(stack.blur, {
       blank: true,
-      name: "Candidates"
+      name: "Candidates " + stack.candidates.length
     });
 
     for(var i = 0; i < stack.candidates.length; i++) {
       var lineA = stack.candidates[i].lineA;
       var lineB = stack.candidates[i].lineB;
+
+      var averageOrigin = averagePoints(lineA.origin, lineB.origin);
+      lineA.origin = lineB.origin = averageOrigin;
+
       drawLine(d, lineA.p1, lineA.p2, 1, "red");
       drawLine(d, lineB.p1, lineB.p2, 1, "red");
     }
+
+    done(null, stack);
+  }, function(stack, done) {
+    var candidates = stack.candidates;
+
+    var xc, yc;
+    var d = debugCanvas(stack.blur, {
+      display: false,
+      name: "Bounds",
+
+      preDraw: function(ctx) {
+        var x1 = candidates[0].lineA.remote.x;
+        var y1 = candidates[0].lineA.remote.y;
+
+        var x2 = candidates[0].lineB.remote.x;
+        var y2 = candidates[0].lineB.remote.y;
+
+        xc = (x1 + x2) / 2;
+        yc = (y1 + y2) / 2;
+
+        var aA = lineAngle(candidates[0].lineA);
+        var aB = lineAngle(candidates[0].lineB);
+        console.log(aA,aB);
+        ctx.translate(xc, yc);
+        ctx.rotate(aA);
+        ctx.translate(-xc, -yc);
+      },
+
+      postDraw: function(ctx) {
+        drawPixel(ctx, xc, yc, "green", 5);
+      }
+    });
+
+    var canvas = d.canvas;
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Far Corner"
+    });
+
+    var candidate = stack.candidates[0];
+    var lineA = candidate.lineA;
+    var lineB = candidate.lineB;
+    var remoteA = lineA.remote;
+    var remoteB = lineB.remote;
+
+    var len = (lineB.length + lineA.length) / 2;
+    var a = lineAngle(lineA);
+    var xc = Math.cos(a) * len + remoteB.x;
+    var yc = Math.sin(a) * len + remoteB.y;
+    drawPixel(d, remoteA.x, remoteA.y, "pink", 5);
+    drawPixel(d, xc, yc, "pink", 5);
+
+    traverseLine(remoteA, {x: xc, y: yc}, function(x, y, i) {
+      xc = Math.cos(a) * -len + x;
+      yc = Math.sin(a) * -len + y;
+      drawPixel(d, x, y, "pink");
+      drawPixel(d, xc, yc, "pink");
+    });
 
     done(null, stack);
   }, function(stack, done) {
