@@ -94,6 +94,7 @@ function traverseLine(p1, p2, opts, cb, done) {
   var vx = p2.x - p1.x;
   var vy = p2.y - p1.y;
 
+  var len = dist / opts.step;
   for(var i = 0, broke = false; !broke && i < dist; i += opts.step) {
     var d = i / dist;
     var x = p1.x + (d * vx);
@@ -103,7 +104,7 @@ function traverseLine(p1, p2, opts, cb, done) {
       break: function() {
         broke = true;
       }
-    }, x, y, d);
+    }, x, y, d, len);
   }
 
   done && done();
@@ -675,11 +676,18 @@ function run(evt) {
     drawPixel(d, remoteA.x, remoteA.y, "pink", 5);
     drawPixel(d, xc, yc, "pink", 5);
 
-    traverseLine(remoteA, {x: xc, y: yc}, function(x, y, i) {
-      xc = Math.cos(a) * -len + x;
-      yc = Math.sin(a) * -len + y;
-      drawPixel(d, x, y, "pink");
-      drawPixel(d, xc, yc, "pink");
+    stack.remoteCorner = new Vector(xc, yc);
+
+    var offset = 100;
+
+    traverseLine(remoteA, {x: xc, y: yc}, {
+      step: 0.5
+    }, function(x, y, i, len) {
+
+      xc = Math.cos(a) * -(offset * i) + x;
+      yc = Math.sin(a) * -(offset * i) + y;
+      drawPixel(d, x, y, "pink", 1);
+      drawPixel(d, xc, yc, "pink", 1);
     });
 
     done(null, stack);
