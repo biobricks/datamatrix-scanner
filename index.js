@@ -568,7 +568,7 @@ function run(evt) {
     var ctx = canvas.getContext("2d");
 
     var stack = {
-      img: evt.path[0],
+      img: evt.target,
       ctx: ctx,
       grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width))
     }
