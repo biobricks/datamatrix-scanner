@@ -149,6 +149,8 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
 
 function drawPixel(ctx, x, y, color, dim) {
   dim = dim || 2;
+  x -= dim / 2;
+  y -= dim / 2;
   ctx.fillStyle = color || DEFAULT_COLOR;
   ctx.fillRect(x, y, dim, dim); 
 }
@@ -419,7 +421,6 @@ function getLineAverage(ctx, p1, p2) {
 	var sum = 0;
 	var x = 0;
 	var y = 0;
-  var counts = {};
 
 	while(i++ < diff) {
 		x = Math.round(p1.x + (i / diff)  * diffX) - 1;
@@ -499,10 +500,10 @@ function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   }
   
   if(validStart.length === 0 || validEnd.length === 0) {
-    debug("Edges not found");
+    console.log("Edges not found");
     return;
   }
-  debug(validStart, validEnd);
+  console.log(validStart, validEnd);
 
   var startX = validStart[0].x;
   var startY = validStart[0].y;
@@ -530,12 +531,12 @@ function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
   out.lineA = findDottedLineCenter(drawCtx, bm, p1, p2, lineA.origin, lineA.remote);
 
   if(!out.lineA) {
-    debug("Didn't find dotted line center");
+    console.log("Didn't find dotted line center");
     return;
   }
 
   if(!out.lineA) {
-    debug("Failed to find dotted line center.");
+    console.log("Failed to find dotted line center.");
     return false;
   }
 
@@ -562,7 +563,7 @@ function drawDetectionLines(ctx, lines) {
 
 function run(evt) {
   async.waterfall([function(done) {
-    debug("Setting up stack");
+    console.log("Setting up stack");
 
     var canvas = $("#input");
     var ctx = canvas.getContext("2d");
@@ -594,10 +595,11 @@ function run(evt) {
 
       candidates = findL(lineDetect.lines, stack);
       if(candidates.length > 0) {
-        debug("Found candidates at %s blur level", blur);
+        console.log("Found candidates at %s blur level", blur);
 
         stack.bitmatrix = lineDetect.bm;
         stack.blur = lineDetect.canvas;
+        stack.blurCtx = stack.blur.getContext("2d");
         stack.candidates = candidates;
 
         return done(null, stack);
@@ -624,6 +626,7 @@ function run(evt) {
 
     done(null, stack);
   }, function(stack, done) {
+    return done(null, stack);
     var candidates = stack.candidates;
 
     var xc, yc;
@@ -674,21 +677,81 @@ function run(evt) {
     var xc = Math.cos(a) * len + remoteB.x;
     var yc = Math.sin(a) * len + remoteB.y;
     drawPixel(d, remoteA.x, remoteA.y, "pink", 5);
-    drawPixel(d, xc, yc, "pink", 5);
+    drawPixel(d, remoteB.x, remoteB.y, "pink", 5);
+    drawPixel(d, xc, yc, "purple", 5);
 
-    stack.remoteCorner = new Vector(xc, yc);
+    stack.farCorner = new Vector(xc, yc);
 
-    var offset = 100;
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Bounds"
+    });
 
-    traverseLine(remoteA, {x: xc, y: yc}, {
-      step: 0.5
+    var candidate = stack.candidates[0];
+    var square = [ candidate.lineA.origin, candidate.lineA.remote, stack.farCorner, candidate.lineB.remote ];
+
+    for(var i = 0; i < square.length; i++) {
+      console.log(square[i]);
+      drawLine(d, square[i], square[i + 1] || square[0], 1, "green");
+    }
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Farer Corner"
+    });
+
+    var candidate = stack.candidates[0];
+    var square = stack.square;
+    var lineA = candidate.lineA;
+    var lineB = candidate.lineB;
+    var a = lineAngle(lineA);
+    var xc = square[3].x;
+    var yc = square[3].y;
+    var width = stack.blur.width;
+    var imageData = stack.blurCtx.getImageData(0, 0, width, stack.blur.height).data;
+    var offset = 10;
+    var sum = 0;
+    var avg = -1;
+    var remoteCorner = stack.remoteCorner = new Vector(xc, yc);
+
+    traverseLine({x: xc, y: yc}, lineA.origin, {
+      step: 0.2
     }, function(x, y, i, len) {
+      var idx = Math.round(width * x + y);
+      var val = (imageData[idx] + imageData[idx + 1] + imageData[idx + 2]) / 3;
 
-      xc = Math.cos(a) * -(offset * i) + x;
-      yc = Math.sin(a) * -(offset * i) + y;
-      drawPixel(d, x, y, "pink", 1);
+      if(avg !== -1) {
+        if(Math.abs(val - ((sum + val) / (i * len + 1))) > 140) {
+          square[0] = new Vector(x, y);
+
+          return this.break();
+        }
+      }
+
+      sum += val
+      avg = sum / (i * len + 1);
+      console.log(avg);
+      xc = Math.cos(a) * (offset + i) + x;
+      yc = Math.sin(a) * (offset + i) + y;
+      console.log([x,y],[xc,yc]);
+      drawPixel(d, x, y, "blue", 1);
       drawPixel(d, xc, yc, "pink", 1);
     });
+
+    var smallLen = 12;
+    //a = (a + Math.PI * 2) % (Math.PI * 2)
+    square[1] = new Vector(Math.cos(a) * smallLen + remoteCorner.x, Math.sin(a) * smallLen + remoteCorner.y);
+    console.log(xc,yc);
+    console.log(square[0]);
+    console.log(square[1]);
+    drawPixel(d, square[0].x, square[0].y, "yellow", 1);
+    drawPixel(d, square[1].x, square[1].y, "yellow", 1);
+
+    drawLine(d, square[0], square[1], 1, "red");
 
     done(null, stack);
   }, function(stack, done) {
@@ -700,7 +763,7 @@ function run(evt) {
     stack.dottedLines = [];
 
     for(i=0; i < stack.candidates.length; i++) {
-      c = stack.candidates[i];
+      var c = stack.candidates[i];
       stack.dottedLines.push(findDottedLines(stack.bitmatrix, stack.ctx, c.lineA, c.lineB));
     }
 
@@ -747,6 +810,7 @@ function run(evt) {
 
     done(null, stack);
   }, function(stack, done) {
+    return done(new Error("Not Implemented"));
     var d = debugCanvas(stack.blur, {
       blank: true,
       name: "Dotted"
@@ -756,14 +820,15 @@ function run(evt) {
       var lineA = stack.dottedLines[i].lineA;
       var lineB = stack.dottedLines[i].lineB;
 
-      debug("Drawing lineA %s/%s - %s/%s", lineA.p1.x);
+      console.log("Drawing lineA %s/%s - %s/%s", lineA.p1.x);
       drawLine(d, lineA.p1, lineA.p2, 1, "rgba(255, 0, 0, 0.5)");
-      debug("Drawing lineB %s/%s - %s/%s", lineB.p1.x, lineB.p1.y, lineB.p2.x, lineB.p2.y)
+      console.log("Drawing lineB %s/%s - %s/%s", lineB.p1.x, lineB.p1.y, lineB.p2.x, lineB.p2.y)
       drawLine(d, lineB.p1, lineB.p2, 1, "rgba(255, 0, 0, 0.5)");
     }
 
     done(null, stack);
   }, function(stack, done) {
+    return done(new Error("Not Implemented"));
     for(var i = 0; i < stack.candidates.length; i++) {
       var lineA = stack.candidates[i].lineA;
       var lineB = stack.candidates[i].lineB;
@@ -820,7 +885,7 @@ function run(evt) {
   var i, c, dottedLines;
 
   if(!dottedLines) {
-    debug("Didn't find dotted line");
+    console.log("Didn't find dotted line");
     return;
   }
 
