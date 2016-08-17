@@ -202,7 +202,7 @@ function lineLength(line) {
   return dist(line.x1, line.y1, line.x2, line.y2);
 }
 
-function lineAngle(line) {
+function finderAngle(line) {
   line.dx = line.x2 - line.x1;
   line.dy = line.y2 - line.y1;
   line.angle = Math.atan(line.dy / line.dx);
@@ -212,11 +212,11 @@ function lineAngle(line) {
 
 
 // returns the smallest angle between two lines
-function smallestAngleBetween(lineA, lineB) {
-  lineA.angle = lineAngle(lineA);
-  lineB.angle = lineAngle(lineB);
+function smallestAngleBetween(finderA, finderB) {
+  finderA.angle = finderAngle(finderA);
+  finderB.angle = finderAngle(finderB);
 
-  var diff = Math.abs(lineB.angle - lineA.angle);
+  var diff = Math.abs(finderB.angle - finderA.angle);
 
   if(diff > Math.PI) {
     diff = diff - Math.PI;
@@ -238,20 +238,20 @@ function findL(lines, opts) {
   var maxLineDiff = 10;
   var r = [];
   
-  function validateAngle(lineA, lineB) {
-    var originDist = lineA.origin.distance(lineB.origin);
+  function validateAngle(finderA, finderB) {
+    var originDist = finderA.origin.distance(finderB.origin);
 
     if(originDist < maxDist) {
-      //drawLine(d, lineA.p1, lineB.p1, 1, "pink");
-      //drawLine(d, lineA.p1, lineB.p2, 2, "pink");
-      //drawLine(d, lineB.p1, lineA.p1, 1, "pink");
-      drawLine(d, lineB.p1, lineB.p2, 3, "rgba(255, 0, 0, 0.5)");
-      drawLine(d, lineA.p1, lineA.p2, 3, "rgba(0, 0, 255, 0.5)");
+      //drawLine(d, finderA.p1, finderB.p1, 1, "pink");
+      //drawLine(d, finderA.p1, finderB.p2, 2, "pink");
+      //drawLine(d, finderB.p1, finderA.p1, 1, "pink");
+      drawLine(d, finderB.p1, finderB.p2, 3, "rgba(255, 0, 0, 0.5)");
+      drawLine(d, finderA.p1, finderA.p2, 3, "rgba(0, 0, 255, 0.5)");
 
-      var relAngle = smallestAngleBetween(lineA, lineB);
+      var relAngle = smallestAngleBetween(finderA, finderB);
 
       if(relAngle > 1.4 && relAngle < 1.6) {
-        drawLine(d, lineB.remote, lineA.remote, 1, "pink");
+        drawLine(d, finderB.remote, finderA.remote, 1, "pink");
         return true;
       }
     }
@@ -260,40 +260,40 @@ function findL(lines, opts) {
   }
 
   for(var i = 0; i < lines.length; i++) {
-    var lineA = lines[i];
-    var lenA = lineA.p1.distance(lineA.p2);
-    lineA.length = lenA;
+    var finderA = lines[i];
+    var lenA = finderA.p1.distance(finderA.p2);
+    finderA.length = lenA;
 
     // try to discard this earlier
     if(lenA < minLen) continue;
 
     for(var j = 0; j < lines.length; j++) {
-      var lineB = lines[j];
+      var finderB = lines[j];
       if(j === i) continue;
-      if(lineA === lineB) continue;
+      if(finderA === finderB) continue;
 
-      if(lineA === lineB) continue;
+      if(finderA === finderB) continue;
       if(
-          lineA.p1.x === lineB.p1.x ||
-          lineA.p1.y === lineB.p1.y ||
-          lineA.p2.x === lineB.p2.x ||
-          lineA.p2.y === lineB.p2.y
+          finderA.p1.x === finderB.p1.x ||
+          finderA.p1.y === finderB.p1.y ||
+          finderA.p2.x === finderB.p2.x ||
+          finderA.p2.y === finderB.p2.y
         ) continue;
 
-      var lenB = lineB.p1.distance(lineB.p2);
-      lineB.length = lenB;
+      var lenB = finderB.p1.distance(finderB.p2);
+      finderB.length = lenB;
 
       // try to discard this earlier
       if(lenB < minLen) continue;
 
-      if(Math.abs(lineA.length - lineB.length) > maxLineDiff) continue;
+      if(Math.abs(finderA.length - finderB.length) > maxLineDiff) continue;
 
-      setEndPoints(lineA, lineB);
+      setEndPoints(finderA, finderB);
 
-      if(validateAngle(lineA, lineB)) {
+      if(validateAngle(finderA, finderB)) {
         r.push({
-          lineA: lineA,
-          lineB: lineB
+          finderA: finderA,
+          finderB: finderB
         });
       }
     }
@@ -306,12 +306,12 @@ function averagePoints(p1, p2) {
   return new Vector((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
 }
 
-function setEndPoints(lineA, lineB) {
+function setEndPoints(finderA, finderB) {
   var pairs = ([
-    [ lineA.p1, lineB.p1 ],
-    [ lineA.p1, lineB.p2 ],
-    [ lineA.p2, lineB.p1 ],
-    [ lineA.p2, lineB.p2 ]
+    [ finderA.p1, finderB.p1 ],
+    [ finderA.p1, finderB.p2 ],
+    [ finderA.p2, finderB.p1 ],
+    [ finderA.p2, finderB.p2 ]
   ]).sort(function(a, b) {
     a[2] = a[0].distance(a[1]);
     b[2] = b[0].distance(b[1]);
@@ -321,11 +321,11 @@ function setEndPoints(lineA, lineB) {
   // origin points based on closest in caparative lines
   var averageOrigin = averagePoints(pairs[0][0], pairs[0][1]);
 
-  lineA.origin = pairs[0][0];
-  lineB.origin = pairs[0][1];
+  finderA.origin = pairs[0][0];
+  finderB.origin = pairs[0][1];
 
-  lineA.remote = (lineA.origin === lineA.p1) ? lineA.p2 : lineA.p1;
-  lineB.remote = (lineB.origin === lineB.p1) ? lineB.p2 : lineB.p1;
+  finderA.remote = (finderA.origin === finderA.p1) ? finderA.p2 : finderA.p1;
+  finderB.remote = (finderB.origin === finderB.p1) ? finderB.p2 : finderB.p1;
 }
 
 // difference between two points
@@ -518,39 +518,39 @@ function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
 }
 
 
-function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
+function findDottedLines(bm, drawCtx, finderA, finderB, opts) {
   var diff, p1, p2, avg;
   var out = {};
 
-  diff = pointDiff(lineA.p1, lineB.p2);
-  p1 = pointAdd(lineA.p2, diff);
-  p2 = pointSub(lineB.p2, diff);
-  diff = pointDiff(lineA.p1, lineA.p2);
+  diff = pointDiff(finderA.p1, finderB.p2);
+  p1 = pointAdd(finderA.p2, diff);
+  p2 = pointSub(finderB.p2, diff);
+  diff = pointDiff(finderA.p1, finderA.p2);
   p2 = pointAdd(p2, diff);
 
-  out.lineA = findDottedLineCenter(drawCtx, bm, p1, p2, lineA.origin, lineA.remote);
+  out.finderA = findDottedLineCenter(drawCtx, bm, p1, p2, finderA.origin, finderA.remote);
 
-  if(!out.lineA) {
+  if(!out.finderA) {
     console.log("Didn't find dotted line center");
     return;
   }
 
-  if(!out.lineA) {
+  if(!out.finderA) {
     console.log("Failed to find dotted line center.");
     return false;
   }
 
-  diff = pointDiff(lineA.origin, lineB.origin);
-  p1 = pointAdd(lineB.remote, diff);
-  p2 = pointAdd(lineA.remote, diff);
-  diff = pointDiff(lineB.origin, lineB.remote);
+  diff = pointDiff(finderA.origin, finderB.origin);
+  p1 = pointAdd(finderB.remote, diff);
+  p2 = pointAdd(finderA.remote, diff);
+  diff = pointDiff(finderB.origin, finderB.remote);
   p2 = pointAdd(p2, diff);
-  out.lineB = {
+  out.finderB = {
     p1: new Vector(p1.x, p1.y),
     p2: new Vector(p2.x, p2.y)
   };
 
-  out.lineB = findDottedLineCenter(drawCtx, bm, p1, p2, lineB.origin, lineB.remote);
+  out.finderB = findDottedLineCenter(drawCtx, bm, p1, p2, finderB.origin, finderB.remote);
 
   return out;
 }
@@ -614,14 +614,14 @@ function run(evt) {
     });
 
     for(var i = 0; i < stack.candidates.length; i++) {
-      var lineA = stack.candidates[i].lineA;
-      var lineB = stack.candidates[i].lineB;
+      var finderA = stack.candidates[i].finderA;
+      var finderB = stack.candidates[i].finderB;
 
-      var averageOrigin = averagePoints(lineA.origin, lineB.origin);
-      lineA.origin = lineB.origin = averageOrigin;
+      var averageOrigin = averagePoints(finderA.origin, finderB.origin);
+      finderA.origin = finderB.origin = averageOrigin;
 
-      drawLine(d, lineA.p1, lineA.p2, 1, "red");
-      drawLine(d, lineB.p1, lineB.p2, 1, "red");
+      drawLine(d, finderA.p1, finderA.p2, 1, "red");
+      drawLine(d, finderB.p1, finderB.p2, 1, "red");
     }
 
     done(null, stack);
@@ -635,17 +635,17 @@ function run(evt) {
       name: "Bounds",
 
       preDraw: function(ctx) {
-        var x1 = candidates[0].lineA.remote.x;
-        var y1 = candidates[0].lineA.remote.y;
+        var x1 = candidates[0].finderA.remote.x;
+        var y1 = candidates[0].finderA.remote.y;
 
-        var x2 = candidates[0].lineB.remote.x;
-        var y2 = candidates[0].lineB.remote.y;
+        var x2 = candidates[0].finderB.remote.x;
+        var y2 = candidates[0].finderB.remote.y;
 
         xc = (x1 + x2) / 2;
         yc = (y1 + y2) / 2;
 
-        var aA = lineAngle(candidates[0].lineA);
-        var aB = lineAngle(candidates[0].lineB);
+        var aA = finderAngle(candidates[0].finderA);
+        var aB = finderAngle(candidates[0].finderB);
         console.log(aA,aB);
         ctx.translate(xc, yc);
         ctx.rotate(aA);
@@ -667,13 +667,13 @@ function run(evt) {
     });
 
     var candidate = stack.candidates[0];
-    var lineA = candidate.lineA;
-    var lineB = candidate.lineB;
-    var remoteA = lineA.remote;
-    var remoteB = lineB.remote;
+    var finderA = candidate.finderA;
+    var finderB = candidate.finderB;
+    var remoteA = finderA.remote;
+    var remoteB = finderB.remote;
 
-    var len = (lineB.length + lineA.length) / 2;
-    var a = lineAngle(lineA);
+    var len = (finderB.length + finderA.length) / 2;
+    var a = finderAngle(finderA);
     var xc = Math.cos(a) * len + remoteB.x;
     var yc = Math.sin(a) * len + remoteB.y;
     drawPixel(d, remoteA.x, remoteA.y, "pink", 5);
@@ -690,7 +690,7 @@ function run(evt) {
     });
 
     var candidate = stack.candidates[0];
-    var square = [ candidate.lineA.origin, candidate.lineA.remote, stack.farCorner, candidate.lineB.remote ];
+    var square = [ candidate.finderA.origin, candidate.finderA.remote, stack.farCorner, candidate.finderB.remote ];
 
     for(var i = 0; i < square.length; i++) {
       console.log(square[i]);
@@ -706,9 +706,9 @@ function run(evt) {
 
     var candidate = stack.candidates[0];
     var square = stack.square;
-    var lineA = candidate.lineA;
-    var lineB = candidate.lineB;
-    var a = lineAngle(lineA);
+    var finderA = candidate.finderA;
+    var finderB = candidate.finderB;
+    var a = finderAngle(finderA);
     var xc = square[3].x;
     var yc = square[3].y;
     var width = stack.blur.width;
@@ -718,7 +718,7 @@ function run(evt) {
     var avg = -1;
     var remoteCorner = stack.remoteCorner = new Vector(xc, yc);
 
-    traverseLine({x: xc, y: yc}, lineA.origin, {
+    traverseLine({x: xc, y: yc}, finderA.origin, {
       step: 0.2
     }, function(x, y, i, len) {
       var idx = Math.round(width * x + y);
@@ -764,7 +764,7 @@ function run(evt) {
 
     for(i=0; i < stack.candidates.length; i++) {
       var c = stack.candidates[i];
-      stack.dottedLines.push(findDottedLines(stack.bitmatrix, stack.ctx, c.lineA, c.lineB));
+      stack.dottedLines.push(findDottedLines(stack.bitmatrix, stack.ctx, c.finderA, c.finderB));
     }
 
     if(stack.dottedLines.length > 2) {
@@ -773,8 +773,8 @@ function run(evt) {
 
     // snap intersection together
     stack.dottedLines.forEach(function(linePair, idx) {
-      var a = linePair.lineA;
-      var b = linePair.lineB;
+      var a = linePair.finderA;
+      var b = linePair.finderB;
 
       var intersect = intersection({
         start: {
@@ -800,11 +800,11 @@ function run(evt) {
 
       // snap lines to intersection
       if(a.p1.distance(b.p1) > a.p1.distance(b.p2)) {
-        linePair.lineA.p2 = new Vector(intersect.x, intersect.y);
+        linePair.finderA.p2 = new Vector(intersect.x, intersect.y);
       }
 
       if(b.p1.distance(a.p1) > b.p1.distance(a.p2)) {
-        linePair.lineB.p2 = new Vector(intersect.x, intersect.y);
+        linePair.finderB.p2 = new Vector(intersect.x, intersect.y);
       }
     });
 
@@ -817,21 +817,21 @@ function run(evt) {
     });
 
     for(var i = 0; i < stack.dottedLines.length; i++) {
-      var lineA = stack.dottedLines[i].lineA;
-      var lineB = stack.dottedLines[i].lineB;
+      var finderA = stack.dottedLines[i].finderA;
+      var finderB = stack.dottedLines[i].finderB;
 
-      console.log("Drawing lineA %s/%s - %s/%s", lineA.p1.x);
-      drawLine(d, lineA.p1, lineA.p2, 1, "rgba(255, 0, 0, 0.5)");
-      console.log("Drawing lineB %s/%s - %s/%s", lineB.p1.x, lineB.p1.y, lineB.p2.x, lineB.p2.y)
-      drawLine(d, lineB.p1, lineB.p2, 1, "rgba(255, 0, 0, 0.5)");
+      console.log("Drawing finderA %s/%s - %s/%s", finderA.p1.x);
+      drawLine(d, finderA.p1, finderA.p2, 1, "rgba(255, 0, 0, 0.5)");
+      console.log("Drawing finderB %s/%s - %s/%s", finderB.p1.x, finderB.p1.y, finderB.p2.x, finderB.p2.y)
+      drawLine(d, finderB.p1, finderB.p2, 1, "rgba(255, 0, 0, 0.5)");
     }
 
     done(null, stack);
   }, function(stack, done) {
     return done(new Error("Not Implemented"));
     for(var i = 0; i < stack.candidates.length; i++) {
-      var lineA = stack.candidates[i].lineA;
-      var lineB = stack.candidates[i].lineB;
+      var finderA = stack.candidates[i].finderA;
+      var finderB = stack.candidates[i].finderB;
 
       function comp(a, b, prevDist, point) {
         var dist = a.distance(b);
@@ -851,17 +851,17 @@ function run(evt) {
       var distB = -1;
 
       stack.dottedLines.forEach(function(line) {
-        var dottedA = line.lineA;
-        var dottedB = line.lineB;
+        var dottedA = line.finderA;
+        var dottedB = line.finderB;
 
-        distA = comp(dottedA.p1, lineA.p1, distA, lineA.p1);
-        distA = comp(dottedA.p1, lineA.p2, distA, lineA.p1);
-        distA = comp(dottedA.p2, lineA.p1, distA, lineA.p2);
-        distA = comp(dottedA.p2, lineA.p2, distA, lineA.p2);
-        distB = comp(dottedB.p1, lineB.p1, distB, lineB.p2);
-        distB = comp(dottedB.p1, lineB.p2, distB, lineB.p2);
-        distB = comp(dottedB.p2, lineB.p1, distB, lineB.p1);
-        distB = comp(dottedB.p2, lineB.p2, distB, lineB.p1);
+        distA = comp(dottedA.p1, finderA.p1, distA, finderA.p1);
+        distA = comp(dottedA.p1, finderA.p2, distA, finderA.p1);
+        distA = comp(dottedA.p2, finderA.p1, distA, finderA.p2);
+        distA = comp(dottedA.p2, finderA.p2, distA, finderA.p2);
+        distB = comp(dottedB.p1, finderB.p1, distB, finderB.p2);
+        distB = comp(dottedB.p1, finderB.p2, distB, finderB.p2);
+        distB = comp(dottedB.p2, finderB.p1, distB, finderB.p1);
+        distB = comp(dottedB.p2, finderB.p2, distB, finderB.p1);
       });
     }
   }, function(stack, done) {
@@ -870,8 +870,8 @@ function run(evt) {
     });
 
     var dotted = [
-      stack.dottedLines[0].lineA,
-      stack.dottedLines[0].lineB
+      stack.dottedLines[0].finderA,
+      stack.dottedLines[0].finderB
     ];
 
     done(null, stack);
@@ -889,20 +889,20 @@ function run(evt) {
     return;
   }
 
-  drawLine(debugCtx, c.lineA.p1, c.lineA.p2, 1, "yellow");
-  drawLine(debugCtx, c.lineB.p1, c.lineB.p2, 1, "yellow");
+  drawLine(debugCtx, c.finderA.p1, c.finderA.p2, 1, "yellow");
+  drawLine(debugCtx, c.finderB.p1, c.finderB.p2, 1, "yellow");
 
-  drawLine(debugCtx, dottedLines.lineA.p1, dottedLines.lineA.p2, 1, "yellow");
-  drawLine(debugCtx, dottedLines.lineB.p1, dottedLines.lineB.p2, 1, "blue");
+  drawLine(debugCtx, dottedLines.finderA.p1, dottedLines.finderA.p2, 1, "yellow");
+  drawLine(debugCtx, dottedLines.finderB.p1, dottedLines.finderB.p2, 1, "blue");
 
   var rect = {
-    x: c.lineA.p2.x,
-    y: c.lineA.p2.y,
-    width: pointDist(c.lineB.p1, dottedLines.lineA.p1),
-    height: pointDist(c.lineA.p2, dottedLines.lineB.p1)
+    x: c.finderA.p2.x,
+    y: c.finderA.p2.y,
+    width: pointDist(c.finderB.p1, dottedLines.finderA.p1),
+    height: pointDist(c.finderA.p2, dottedLines.finderB.p1)
   };
 
-  traverseLine(dottedLines.lineB.p1, dottedLines.lineA.p2, {
+  traverseLine(dottedLines.finderB.p1, dottedLines.finderA.p2, {
     step: .5
   }, function(x, y, i) {
     drawPixel(debugCtx, x, y, "rgba(255, 0, 0, " + i + ")");
@@ -915,8 +915,8 @@ function run(evt) {
   debugCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
   debugCtx.fill();
 
-  drawLine(debugCtx, c.lineB.p1, dottedLines.lineA.p1, 1, "pink");
-  drawLine(debugCtx, c.lineA.p2, dottedLines.lineB.p1, 1, "pink");
+  drawLine(debugCtx, c.finderB.p1, dottedLines.finderA.p1, 1, "pink");
+  drawLine(debugCtx, c.finderA.p2, dottedLines.finderB.p1, 1, "pink");
 
   for(var ix = Math.round(rect.x); ix < Math.round(rect.x + rect.width); ix++) {
     for(var iy = Math.round(rect.y); iy < Math.round(rect.y + rect.height); iy++) {
