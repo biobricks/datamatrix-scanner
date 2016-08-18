@@ -230,6 +230,7 @@ function smallestAngleBetween(finderA, finderB) {
 function findL(lines, opts) {
   var d = debugCanvas(opts.ctx.canvas, {
     blank: true,
+    display: false,
     name: "findL"
   });
 
@@ -620,8 +621,8 @@ function run(evt) {
       var averageOrigin = averagePoints(finderA.origin, finderB.origin);
       finderA.origin = finderB.origin = averageOrigin;
 
-      drawLine(d, finderA.p1, finderA.p2, 1, "red");
-      drawLine(d, finderB.p1, finderB.p2, 1, "red");
+      drawLine(d, finderA.origin, finderA.remote, 1, "red");
+      drawLine(d, finderB.origin, finderB.remote, 1, "red");
     }
 
     done(null, stack);
@@ -672,6 +673,10 @@ function run(evt) {
     var remoteA = finderA.remote;
     var remoteB = finderB.remote;
 
+    // this can be improved by finding the point
+    // at (finderAdeg + finderBdeg) / 2
+    // len finderA.remote <> finderB.remote
+    // and averaging it with xc/yc
     var len = (finderB.length + finderA.length) / 2;
     var a = finderAngle(finderA);
     var xc = Math.cos(a) * len + remoteB.x;
@@ -684,128 +689,38 @@ function run(evt) {
 
     done(null, stack);
   }, function(stack, done) {
-    var d = debugCanvas(stack.blur, {
-      blank: true,
-      name: "Bounds"
-    });
-
     var candidate = stack.candidates[0];
-    var square = [ candidate.finderA.origin, candidate.finderA.remote, stack.farCorner, candidate.finderB.remote ];
+    stack.square = [ candidate.finderA.origin, candidate.finderA.remote, stack.farCorner, candidate.finderB.remote ];
 
-    for(var i = 0; i < square.length; i++) {
-      console.log(square[i]);
-      drawLine(d, square[i], square[i + 1] || square[0], 1, "green");
-    }
+    done(null, stack);
+  }, function(stack, done) {
+    var candidate = stack.candidates[0];
+
+    stack.timingA = {
+      p1: candidate.finderB.remote,
+      p2: stack.farCorner
+    };
+
+    stack.timingB = {
+      p1: candidate.finderA.remote,
+      p2: stack.farCorner
+    };
 
     done(null, stack);
   }, function(stack, done) {
     var d = debugCanvas(stack.blur, {
       blank: true,
-      name: "Farer Corner"
+      name: "Timing Lines"
     });
 
-    var candidate = stack.candidates[0];
-    var square = stack.square;
-    var finderA = candidate.finderA;
-    var finderB = candidate.finderB;
-    var a = finderAngle(finderA);
-    var xc = square[3].x;
-    var yc = square[3].y;
-    var width = stack.blur.width;
-    var imageData = stack.blurCtx.getImageData(0, 0, width, stack.blur.height).data;
-    var offset = 10;
-    var sum = 0;
-    var avg = -1;
-    var remoteCorner = stack.remoteCorner = new Vector(xc, yc);
-
-    traverseLine({x: xc, y: yc}, finderA.origin, {
-      step: 0.2
-    }, function(x, y, i, len) {
-      var idx = Math.round(width * x + y);
-      var val = (imageData[idx] + imageData[idx + 1] + imageData[idx + 2]) / 3;
-
-      if(avg !== -1) {
-        if(Math.abs(val - ((sum + val) / (i * len + 1))) > 140) {
-          square[0] = new Vector(x, y);
-
-          return this.break();
-        }
-      }
-
-      sum += val
-      avg = sum / (i * len + 1);
-      console.log(avg);
-      xc = Math.cos(a) * (offset + i) + x;
-      yc = Math.sin(a) * (offset + i) + y;
-      console.log([x,y],[xc,yc]);
-      drawPixel(d, x, y, "blue", 1);
-      drawPixel(d, xc, yc, "pink", 1);
-    });
-
-    var smallLen = 12;
-    //a = (a + Math.PI * 2) % (Math.PI * 2)
-    square[1] = new Vector(Math.cos(a) * smallLen + remoteCorner.x, Math.sin(a) * smallLen + remoteCorner.y);
-    console.log(xc,yc);
-    console.log(square[0]);
-    console.log(square[1]);
-    drawPixel(d, square[0].x, square[0].y, "yellow", 1);
-    drawPixel(d, square[1].x, square[1].y, "yellow", 1);
-
-    drawLine(d, square[0], square[1], 1, "red");
+    drawLine(d, stack.timingA.p1, stack.timingA.p2, 1, "orange");
+    drawLine(d, stack.timingB.p1, stack.timingB.p2, 1, "orange");
 
     done(null, stack);
   }, function(stack, done) {
     var d = debugCanvas(stack.blur, {
       blank: true,
-      name: "Intersection"
-    });
-
-    stack.dottedLines = [];
-
-    for(i=0; i < stack.candidates.length; i++) {
-      var c = stack.candidates[i];
-      stack.dottedLines.push(findDottedLines(stack.bitmatrix, stack.ctx, c.finderA, c.finderB));
-    }
-
-    if(stack.dottedLines.length > 2) {
-      console.warn("Unsure how to handle more than 2 dotted lines");
-    }
-
-    // snap intersection together
-    stack.dottedLines.forEach(function(linePair, idx) {
-      var a = linePair.finderA;
-      var b = linePair.finderB;
-
-      var intersect = intersection({
-        start: {
-          x: a.p1.x,
-          y: a.p1.y
-        },
-        end: {
-          x: a.p2.x,
-          y: a.p2.y
-        }
-      }, {
-        start: {
-          x: b.p1.x,
-          y: b.p1.y
-        },
-        end: {
-          x: b.p2.x,
-          y: b.p2.y
-        }
-      });
-
-      drawPixel(d, intersect.x, intersect.y, "blue");
-
-      // snap lines to intersection
-      if(a.p1.distance(b.p1) > a.p1.distance(b.p2)) {
-        linePair.finderA.p2 = new Vector(intersect.x, intersect.y);
-      }
-
-      if(b.p1.distance(a.p1) > b.p1.distance(a.p2)) {
-        linePair.finderB.p2 = new Vector(intersect.x, intersect.y);
-      }
+      name: "Small L"
     });
 
     done(null, stack);
