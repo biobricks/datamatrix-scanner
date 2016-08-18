@@ -19,6 +19,8 @@ var BitMatrix = require("./jsdatamatrix/src/dm_bitmatrix.js");
 var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
 const STEP = 1 / 100;
+const MIN_AVG = 100;
+const MAX_AVG = 144;
 
 var canvasDebug = true;
 
@@ -192,6 +194,14 @@ function drawPixel(ctx, x, y, color, dim) {
   y -= dim / 2;
   ctx.fillStyle = color || DEFAULT_COLOR;
   ctx.fillRect(x, y, dim, dim); 
+}
+
+function drawText(ctx, x, y, str, color) {
+  ctx.save();
+  ctx.fillStyle = color || DEFAULT_COLOR;
+  ctx.fillText(str, x, y);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawImageTo(img, ctx, downSize) {
@@ -449,7 +459,7 @@ function toGrayscale(imageData, method) {
 };
 
 function getLineAverage(ctx, p1, p2) {
-	var grayscale = toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width));
+	var grayscale = ctx instanceof CanvasRenderingContext2D ? toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)) : ctx;
 
 	var diffX = p2.x - p1.x;
 	var diffY = p2.y - p1.y;
@@ -639,7 +649,12 @@ function run(evt) {
 
         stack.bitmatrix = lineDetect.bm;
         stack.blur = lineDetect.canvas;
-        stack.blurCtx = stack.blur.getContext("2d");
+
+        var blurCtx = stack.blur.getContext("2d")
+        stack.blurCtx = blurCtx;
+        stack.blurGrayscale = toGrayscale(blurCtx.getImageData(0, 0, blurCtx.canvas.height, blurCtx.canvas.width));
+        stack.blurGrayscale.canvas = lineDetect.canvas;
+
         stack.candidates = candidates;
 
         return done(null, stack);
@@ -648,6 +663,10 @@ function run(evt) {
 
     done(new Error("No Canidates Found"));
   }, function(stack, done) {
+    // by this point candidates should be pairs,
+    // this will fix some issues around double
+    // processing. This will also help ensure
+    // finderA is across from timingA, B/B, etc.
     var d = debugCanvas(stack.blur, {
       blank: true,
       name: "Candidates " + stack.candidates.length
@@ -657,47 +676,26 @@ function run(evt) {
       var finderA = stack.candidates[i].finderA;
       var finderB = stack.candidates[i].finderB;
 
+      if(finderA === finderB) continue;
+
       var averageOrigin = averagePoints(finderA.origin, finderB.origin);
       finderA.origin = finderB.origin = averageOrigin;
 
       drawLine(d, finderA.origin, finderA.remote, 1, "red");
       drawLine(d, finderB.origin, finderB.remote, 1, "red");
+
+      drawText(d,
+          (finderA.p1.x + finderA.p2.x) / 2,
+          (finderA.p1.y + finderA.p2.y) / 2,
+          "A", "red"
+          );
+
+      drawText(d,
+          (finderB.p1.x + finderB.p2.x) / 2,
+          (finderB.p1.y + finderB.p2.y) / 2,
+          "B", "red"
+          );
     }
-
-    done(null, stack);
-  }, function(stack, done) {
-    return done(null, stack);
-    var candidates = stack.candidates;
-
-    var xc, yc;
-    var d = debugCanvas(stack.blur, {
-      display: false,
-      name: "Bounds",
-
-      preDraw: function(ctx) {
-        var x1 = candidates[0].finderA.remote.x;
-        var y1 = candidates[0].finderA.remote.y;
-
-        var x2 = candidates[0].finderB.remote.x;
-        var y2 = candidates[0].finderB.remote.y;
-
-        xc = (x1 + x2) / 2;
-        yc = (y1 + y2) / 2;
-
-        var aA = lineAngle(candidates[0].finderA);
-        var aB = lineAngle(candidates[0].finderB);
-        console.log(aA,aB);
-        ctx.translate(xc, yc);
-        ctx.rotate(aA);
-        ctx.translate(-xc, -yc);
-      },
-
-      postDraw: function(ctx) {
-        drawPixel(ctx, xc, yc, "green", 5);
-      }
-    });
-
-    var canvas = d.canvas;
 
     done(null, stack);
   }, function(stack, done) {
@@ -747,16 +745,139 @@ function run(evt) {
 
     drawLine(d, stack.timingA.p1, stack.timingA.p2, 1, "orange");
     drawLine(d, stack.timingB.p1, stack.timingB.p2, 1, "orange");
+    drawText(d,
+        (stack.timingA.p1.x + stack.timingA.p2.x) / 2,
+        (stack.timingA.p1.y + stack.timingA.p2.y) / 2,
+        "A", "orange"
+    );
+
+    drawText(d,
+        (stack.timingB.p1.x + stack.timingB.p2.x) / 2,
+        (stack.timingB.p1.y + stack.timingB.p2.y) / 2,
+        "B", "orange"
+    );
+
+    done(null, stack);
+  }), function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Verify Timing A"
+    });
+
+    var a = lineAngle(stack.timingA);
+    var len = stack.timingA.length;
+    var offset = 0;
+
+    var outerAvg = -1;
+    var outerTiming;
+    var innerTiming;
+
+    traverseLine(stack.timingB.p2, stack.timingB.p1, function(x, y, i) {
+      var findSideX = x - Math.cos(a) * len;
+      var findSideY = y - Math.sin(a) * len;
+
+      var avg = getLineAverage(stack.blurGrayscale, {
+        x: x,
+        y: y
+      }, {
+        x: findSideX,
+        y: findSideY
+      });
+
+      if(!outerTiming && avg > MIN_AVG && avg < MAX_AVG) {
+        drawLine(d, {
+          x: x,
+          y: y
+        }, {
+          x: findSideX,
+          y: findSideY
+        }, 1, "purple");
+
+        outerAvg = avg;
+        outerTiming = new Line({
+          x: x,
+          y: y
+        }, {
+          x: findSideX,
+          y: findSideY
+        });
+      } else if(outerTiming && Math.abs(outerAvg - avg) > 40) {
+        drawLine(d, {
+          x: x,
+          y: y
+        }, {
+          x: findSideX,
+          y: findSideY
+        }, 1, "purple");
+
+        this.break();
+      }
+
+      drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
+      drawPixel(d, findSideX, findSideY, "rgba(" + Math.round(i*255) + ",0,0,1)", 1);
+    });
 
     done(null, stack);
   }, function(stack, done) {
     var d = debugCanvas(stack.blur, {
       blank: true,
-      name: "Small L"
+      name: "Verify Timing B"
+    });
+
+    var a = lineAngle(stack.timingB);
+    var len = stack.timingA.length;
+    var offset = 0;
+
+    var outerAvg = -1;
+    var outerTiming;
+    var innerTiming;
+
+    traverseLine(stack.timingA.p2, stack.timingA.p1, function(x, y, i) {
+      var findSideX = x - Math.cos(a) * len;
+      var findSideY = y - Math.sin(a) * len;
+
+      var avg = getLineAverage(stack.blurGrayscale, {
+        x: x,
+        y: y
+      }, {
+        x: findSideX,
+        y: findSideY
+      });
+
+      if(!outerTiming && avg > MIN_AVG && avg < MAX_AVG) {
+        drawLine(d, {
+          x: x,
+          y: y
+        }, {
+          x: findSideX,
+          y: findSideY
+        }, 1, "purple");
+
+        outerAvg = avg;
+        outerTiming = new Line({
+          x: x,
+          y: y
+        }, {
+          x: findSideX,
+          y: findSideY
+        });
+      } else if(outerTiming && Math.abs(outerAvg - avg) > 40) {
+        drawLine(d, {
+          x: x,
+          y: y
+        }, {
+          x: findSideX,
+          y: findSideY
+        }, 1, "purple");
+
+        this.break();
+      }
+
+      drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
+      drawPixel(d, findSideX, findSideY, "rgba(" + Math.round(i*255) + ",0,0,1)", 1);
     });
 
     done(null, stack);
-  }, function(stack, done) {
     return done(new Error("Not Implemented"));
     var d = debugCanvas(stack.blur, {
       blank: true,
