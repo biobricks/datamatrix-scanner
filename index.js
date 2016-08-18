@@ -20,7 +20,8 @@ var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
 const STEP = 1 / 100;
 const MIN_AVG = 100;
-const MAX_AVG = 144;
+const MAX_AVG = 124;
+const AVG_DEVIATION = 90;
 
 var canvasDebug = true;
 
@@ -619,6 +620,7 @@ function run(evt) {
     var ctx = canvas.getContext("2d");
 
     var stack = {
+      canvas: canvas,
       img: evt.target,
       ctx: ctx,
       grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width))
@@ -759,6 +761,47 @@ function run(evt) {
 
     done(null, stack);
   }), function(stack, done) {
+    var d = debugCanvas(stack.canvas, {
+      blank: true,
+      name: "Binary"
+    });
+
+    var canvas = stack.canvas;
+    var ctx = canvas.getContext("2d");
+    var data = ctx.getImageData(0, 0, canvas.height, canvas.width).data;
+
+    var gi, red, green, blue, alpha;
+
+    for(var i = 0; i < data.length; i += 4) {
+      gi = i / 4;
+      red = data[i];
+      green = data[i + 1];
+      blue = data[i + 2];
+      alpha = data[i + 3] / 255;
+
+      var bit = ((red + green + blue) / 3) < 50 ? 255 : 0;
+      var x = gi % canvas.width;
+      var y = Math.floor(gi / canvas.width);
+
+      drawPixel(d, x, y, bit ? "black" : "white");
+    }
+
+    stack.binary = d.canvas;
+    stack.binaryCtx = d.canvas.getContext("2d");
+    stack.binaryImageData = d.getImageData(0, 0, d.canvas.width, d.canvas.height);
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.canvas, {
+      blank: true,
+      name: "Binary 'Grayscale'"
+    });
+
+    stack.binaryArray = toGrayscale(stack.binaryImageData);
+    stack.binaryArray.canvas = stack.binary;
+
+    done(null, stack);
+  }, function(stack, done) {
     var d = debugCanvas(stack.blur, {
       blank: true,
       name: "Verify Timing A"
@@ -776,7 +819,7 @@ function run(evt) {
       var findSideX = x - Math.cos(a) * len;
       var findSideY = y - Math.sin(a) * len;
 
-      var avg = getLineAverage(stack.blurGrayscale, {
+      var avg = getLineAverage(stack.binaryArray, {
         x: x,
         y: y
       }, {
@@ -801,7 +844,9 @@ function run(evt) {
           x: findSideX,
           y: findSideY
         });
-      } else if(outerTiming && Math.abs(outerAvg - avg) > 40) {
+
+        console.log(avg);
+      } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
         drawLine(d, {
           x: x,
           y: y
@@ -811,6 +856,9 @@ function run(evt) {
         }, 1, "purple");
 
         this.break();
+
+        console.log(avg);
+      } else {
       }
 
       drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
@@ -836,7 +884,7 @@ function run(evt) {
       var findSideX = x - Math.cos(a) * len;
       var findSideY = y - Math.sin(a) * len;
 
-      var avg = getLineAverage(stack.blurGrayscale, {
+      var avg = getLineAverage(stack.binaryArray, {
         x: x,
         y: y
       }, {
@@ -861,7 +909,8 @@ function run(evt) {
           x: findSideX,
           y: findSideY
         });
-      } else if(outerTiming && Math.abs(outerAvg - avg) > 40) {
+        console.log(avg);
+      } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
         drawLine(d, {
           x: x,
           y: y
@@ -871,6 +920,7 @@ function run(evt) {
         }, 1, "purple");
 
         this.break();
+        console.log(avg);
       }
 
       drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
