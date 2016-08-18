@@ -20,6 +20,33 @@ var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
 const STEP = 1 / 100;
 
+function Line(p1, p2) {
+  this.p1 = p1;
+  this.p2 = p2;
+}
+
+Line.prototype = {
+  get length() {
+    return this.p1.distance(this.p2);
+  },
+
+  get x1() {
+    return this.p1.x;
+  },
+
+  get x2() {
+    return this.p2.x;
+  },
+
+  get y1() {
+    return this.p1.y;
+  },
+
+  get y2() {
+    return this.p2.y;
+  }
+}
+
 function cloneCanvas(oldCanvas, opts) {
   opts = (opts || {});
 
@@ -696,15 +723,8 @@ function run(evt) {
   }, function(stack, done) {
     var candidate = stack.candidates[0];
 
-    stack.timingA = {
-      p1: candidate.finderB.remote,
-      p2: stack.farCorner
-    };
-
-    stack.timingB = {
-      p1: candidate.finderA.remote,
-      p2: stack.farCorner
-    };
+    stack.timingA = new Line(candidate.finderB.remote, stack.farCorner);
+    stack.timingB = new Line(candidate.finderA.remote, stack.farCorner);
 
     done(null, stack);
   }, function(stack, done) {
