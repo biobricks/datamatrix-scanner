@@ -594,7 +594,7 @@ function run(evt) {
 
       drawDetectionLines(d, lineDetect.lines);
 
-      candidates = findL(lineDetect.lines, stack);
+      var candidates = findL(lineDetect.lines, stack);
       if(candidates.length > 0) {
         console.log("Found candidates at %s blur level", blur);
 
