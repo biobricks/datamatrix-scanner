@@ -202,7 +202,7 @@ function lineLength(line) {
   return dist(line.x1, line.y1, line.x2, line.y2);
 }
 
-function finderAngle(line) {
+function lineAngle(line) {
   line.dx = line.x2 - line.x1;
   line.dy = line.y2 - line.y1;
   line.angle = Math.atan(line.dy / line.dx);
@@ -213,8 +213,8 @@ function finderAngle(line) {
 
 // returns the smallest angle between two lines
 function smallestAngleBetween(finderA, finderB) {
-  finderA.angle = finderAngle(finderA);
-  finderB.angle = finderAngle(finderB);
+  finderA.angle = lineAngle(finderA);
+  finderB.angle = lineAngle(finderB);
 
   var diff = Math.abs(finderB.angle - finderA.angle);
 
@@ -645,8 +645,8 @@ function run(evt) {
         xc = (x1 + x2) / 2;
         yc = (y1 + y2) / 2;
 
-        var aA = finderAngle(candidates[0].finderA);
-        var aB = finderAngle(candidates[0].finderB);
+        var aA = lineAngle(candidates[0].finderA);
+        var aB = lineAngle(candidates[0].finderB);
         console.log(aA,aB);
         ctx.translate(xc, yc);
         ctx.rotate(aA);
@@ -678,7 +678,7 @@ function run(evt) {
     // len finderA.remote <> finderB.remote
     // and averaging it with xc/yc
     var len = (finderB.length + finderA.length) / 2;
-    var a = finderAngle(finderA);
+    var a = lineAngle(finderA);
     var xc = Math.cos(a) * len + remoteB.x;
     var yc = Math.sin(a) * len + remoteB.y;
     drawPixel(d, remoteA.x, remoteA.y, "pink", 5);
