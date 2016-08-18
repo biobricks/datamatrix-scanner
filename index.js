@@ -20,6 +20,8 @@ var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
 const STEP = 1 / 100;
 
+var canvasDebug = true;
+
 function Line(p1, p2) {
   this.p1 = p1;
   this.p2 = p2;
@@ -44,6 +46,16 @@ Line.prototype = {
 
   get y2() {
     return this.p2.y;
+  }
+}
+
+function canBug(fn) {
+  return function(stack, done) {
+    if(canvasDebug) {
+      fn(stack, done);
+    } else {
+      done(null, stack);
+    }
   }
 }
 
@@ -727,7 +739,7 @@ function run(evt) {
     stack.timingB = new Line(candidate.finderA.remote, stack.farCorner);
 
     done(null, stack);
-  }, function(stack, done) {
+  }, canBug(function(stack, done) {
     var d = debugCanvas(stack.blur, {
       blank: true,
       name: "Timing Lines"
