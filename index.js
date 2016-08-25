@@ -22,7 +22,8 @@ const MIN_AVG = 100;
 const MAX_AVG = 134;
 const AVG_DEVIATION = 70;
 
-var canvasDebug = true;
+var debugMode = true;
+var canvasDebug = debugMode;
 
 function Line(p1, p2) {
   this.p1 = p1;
@@ -61,8 +62,6 @@ function canBug(fn) {
   }
 }
 
-var debugMode = false;
-
 function cloneCanvas(oldCanvas, opts) {
   opts = (opts || {});
 
@@ -95,6 +94,7 @@ var debugCanvases = [];
 
 function debugCanvas(canvas, opts) {
   if(!debugMode) return;
+
   var d = cloneCanvas(canvas, opts);
   d.className = "debug-canvas";
 
@@ -777,6 +777,8 @@ function run(image, canvas) {
     var canvas = stack.canvas;
     var ctx = canvas.getContext("2d");
     var data = ctx.getImageData(0, 0, canvas.height, canvas.width).data;
+    var binCanvas = cloneCanvas(stack.canvas);
+    var binCtx = binCanvas.getContext("2d");
 
     var gi, red, green, blue, alpha;
 
@@ -791,12 +793,13 @@ function run(image, canvas) {
       var x = gi % canvas.width;
       var y = Math.floor(gi / canvas.width);
 
+      drawPixel(binCtx, x, y, bit ? "black" : "white");
       drawPixel(d, x, y, bit ? "black" : "white");
     }
 
-    stack.binary = d.canvas;
-    stack.binaryCtx = d.canvas.getContext("2d");
-    stack.binaryImageData = d.getImageData(0, 0, d.canvas.width, d.canvas.height);
+    stack.binary = binCanvas;
+    stack.binaryCtx = binCtx;
+    stack.binaryImageData = binCtx.getImageData(0, 0, binCanvas.width, binCanvas.height);
 
     done(null, stack);
   }, function(stack, done) {
