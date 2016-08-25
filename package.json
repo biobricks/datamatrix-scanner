@@ -8,13 +8,15 @@
     "intersect": "^1.0.1",
     "intersection": "0.0.1",
     "jquery": "~2.2.1",
+    "line-segment-detector": "0.0.4",
+    "stackblur-canvas": "^1.2.1",
     "underscore": "^1.8.3",
     "victor": "^1.1.0",
     "xtend": "^4.0.1"
   },
   "scripts": {
-    "build": "browserify index.js > bundle.js",
-    "watch": "watchify index.js -o bundle.js -dv"
+    "build": "browserify example.js > bundle.js",
+    "watch": "watchify example.js -o bundle.js -dv"
   },
   "license": "AGPL-3.0",
   "devDependencies": {

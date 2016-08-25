@@ -5,11 +5,10 @@ debug = debug("bbdm");
 var intersection = require("intersection").intersect;
 var xtend = require("xtend");
 var Vector = require("victor");
+var stackblur = require("stackblur-canvas");
+var lsd = require("line-segment-detector");
 
 var $ = document.querySelector.bind(document);
-
-//var lsd = require("./line-segment-detector/index.js");
-var lsd = Module;
 
 var downSize = 400;
 
@@ -62,6 +61,8 @@ function canBug(fn) {
   }
 }
 
+var debugMode = false;
+
 function cloneCanvas(oldCanvas, opts) {
   opts = (opts || {});
 
@@ -93,6 +94,7 @@ function cloneCanvas(oldCanvas, opts) {
 var debugCanvases = [];
 
 function debugCanvas(canvas, opts) {
+  if(!debugMode) return;
   var d = cloneCanvas(canvas, opts);
   d.className = "debug-canvas";
 
@@ -111,8 +113,8 @@ function debugCanvas(canvas, opts) {
   });
   d.style.setProperty("display", input.checked ? "block" : "none");
 
-
   div.appendChild(input);
+
   if(opts.name) {
     var label = document.createElement("label");
     label.textContent = opts.name;
@@ -161,6 +163,8 @@ function sampleToColor(sample) {
 }
 
 function drawLine(ctx, x1, y1, x2, y2, width, color) {
+  if(!debugMode) return;
+
   if(typeof x1 === "object") {
     if(typeof y1 === "object") {
       // received two point objects
@@ -190,6 +194,8 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
 }
 
 function drawPixel(ctx, x, y, color, dim) {
+  if(!debugMode) return;
+
   dim = dim || 2;
   x -= dim / 2;
   y -= dim / 2;
@@ -198,6 +204,8 @@ function drawPixel(ctx, x, y, color, dim) {
 }
 
 function drawText(ctx, x, y, str, color) {
+  if(!debugMode) return;
+
   ctx.save();
   ctx.fillStyle = color || DEFAULT_COLOR;
   ctx.fillText(str, x, y);
@@ -206,7 +214,6 @@ function drawText(ctx, x, y, str, color) {
 }
 
 function drawImageTo(img, ctx, downSize) {
-
   if(img.width > img.height) {
     var newHeight = downSize * img.height / img.width;
     ctx.drawImage(img, 0, Math.round((downSize - newHeight) / 2), downSize, newHeight);
@@ -221,7 +228,7 @@ function detectLines(stack) {
   var canvas = cloneCanvas(stack.ctx.canvas);
   var ctx = canvas.getContext("2d");
 
-  stackBlurCanvasRGBA(canvas, 0, 0, downSize, downSize, blur);
+  stackblur.canvasRGBA(canvas, 0, 0, downSize, downSize, blur);
 
   var bm = new BitMatrix(canvas, {grayscale: true});
   bm.brightnessAndContrast(80, 150);
@@ -612,18 +619,18 @@ function drawDetectionLines(ctx, lines) {
   });
 }
 
-function run(evt) {
+function run(image, canvas) {
+
   async.waterfall([function(done) {
     console.log("Setting up stack");
 
-    var canvas = $("#input");
     var ctx = canvas.getContext("2d");
 
     var stack = {
       canvas: canvas,
-      img: evt.target,
       ctx: ctx,
-      grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width))
+      grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)),
+      img: image
     }
 
     drawImageTo(stack.img, stack.ctx, downSize);
@@ -937,6 +944,7 @@ function run(evt) {
       name: "Dotted"
     });
 
+
     for(var i = 0; i < stack.dottedLines.length; i++) {
       var finderA = stack.dottedLines[i].finderA;
       var finderB = stack.dottedLines[i].finderB;
@@ -1003,6 +1011,7 @@ function run(evt) {
   });
   return;
 
+/*
   var i, c, dottedLines;
 
   if(!dottedLines) {
@@ -1045,11 +1054,9 @@ function run(evt) {
       drawPixel(detectCtx, ix, iy, sampleToColor(sample));
     }
   }
+*/
 }
 
-var sample = "samples/" + (window.location.hash.length > 1 ? window.location.hash.slice(1) : "sample1.jpg");
-var image = document.createElement("img");
-image.onload = run;
-image.src = sample;
-//image.src = "samples/sample1.jpg";
-//image.src = "samples/plate1_cropped.jpg";
+
+module.exports = run;
+
