@@ -26,8 +26,8 @@ var debugMode = true;
 var canvasDebug = debugMode;
 
 function Line(p1, p2) {
-  this.p1 = p1;
-  this.p2 = p2;
+  this.p1 = p1 instanceof Vector ? p1 : new Vector(p1.x, p1.y);
+  this.p2 = p2 instanceof Vector ? p2 : new Vector(p2.x, p2.y);
 }
 
 Line.prototype = {
@@ -479,17 +479,31 @@ function getLineAverage(ctx, p1, p2) {
 	var sum = 0;
 	var x = 0;
 	var y = 0;
+  var count = -1; // initial switch sets to zero
+  var bit = -1;
+  var lastBit = -1;
 
 	while(i++ < diff) {
 		x = Math.round(p1.x + (i / diff)  * diffX) - 1;
 		y = Math.round(p1.y + (i / diff)  * diffY) - 1;
 
-		sum += Math.round(grayscale[y * ctx.canvas.width + x]);
+    bit = grayscale[y * ctx.canvas.width + x];
+
+    if(bit !== lastBit) {
+      console.log(bit);
+      count++;
+    }
+    lastBit = bit;
+
+		sum += Math.round(bit);
 	}
 
 	average = Math.round(sum / diff);
 
-	return average;
+	return {
+    average: average,
+    count: count
+  };
 }
 
 // check if this is actually a dotted line
@@ -499,6 +513,7 @@ function getLineAverage(ctx, p1, p2) {
 // and return corrected line that is closer
 // to running through the middle of squares
 function verifyDottedLine(drawCtx, bm, p1, p2) {
+  console.error("this shouldn't happen. verifyDottedLine");
   var average = getLineAverage(drawCtx, p1, p2);
   //debug("Line average: %s", average);
 
@@ -618,6 +633,70 @@ function drawDetectionLines(ctx, lines) {
     drawLine(ctx, line.p1, line.p2, 1, "green");
   });
 }
+
+function findTimingLines(binaryArray, timingA, timingB) {
+  var a = lineAngle(timingA);
+  var len = timingA.length;
+  var offset = 0;
+
+  var outerAvg = -1;
+  var outerTiming;
+  var innerTiming;
+
+  var countSum = 0;
+  var countAvg = 0;
+
+  if(a < 0) a = -a;
+
+  traverseLine(timingB.p2, timingB.p1, function(x, y, i) {
+    // this needs to be smarter
+    // it should determine if A is + or - of B
+    var findSideX = x - Math.cos(a) * len;
+    var findSideY = y - Math.sin(a) * len;
+
+    var lineAvg = getLineAverage(binaryArray, {
+      x: x,
+      y: y
+    }, {
+      x: findSideX,
+      y: findSideY
+    });
+
+    var avg = lineAvg.average;
+    countSum += lineAvg.count;
+    countAvg++;
+
+    if(!outerTiming && avg > MIN_AVG && avg < MAX_AVG) {
+      outerAvg = avg;
+      outerTiming = new Line({
+        x: x,
+        y: y
+      }, {
+        x: findSideX,
+        y: findSideY
+      });
+
+    } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
+      innerTiming = new Line({
+        x: x,
+        y: y
+      }, {
+        x: findSideX,
+        y: findSideY
+      });
+
+      return this.break();
+    }
+  });
+
+  return {
+    distance: innerTiming.p1.distance(outerTiming.p1),
+    count: Math.round(countSum / countAvg),
+    innerTiming: innerTiming,
+    outerTiming: outerTiming
+  };
+}
+
 
 function run(image, canvas) {
 
@@ -818,59 +897,14 @@ function run(image, canvas) {
       name: "Verify Timing A"
     });
 
-    var a = lineAngle(stack.timingA);
-    var len = stack.timingA.length;
-    var offset = 0;
+    var timingLines = findTimingLines(stack.binaryArray, stack.timingA, stack.timingB);
+    if(timingLines.innerTiming)
+      drawLine(d, timingLines.innerTiming.p1, timingLines.innerTiming.p2, 1, "purple");
 
-    var outerAvg = -1;
-    var outerTiming;
-    var innerTiming;
+    if(timingLines.outerTiming)
+      drawLine(d, timingLines.outerTiming.p1, timingLines.outerTiming.p2, 1, "purple");
 
-    traverseLine(stack.timingB.p2, stack.timingB.p1, function(x, y, i) {
-      var findSideX = x - Math.cos(a) * len;
-      var findSideY = y - Math.sin(a) * len;
-
-      var avg = getLineAverage(stack.binaryArray, {
-        x: x,
-        y: y
-      }, {
-        x: findSideX,
-        y: findSideY
-      });
-
-      if(!outerTiming && avg > MIN_AVG && avg < MAX_AVG) {
-        drawLine(d, {
-          x: x,
-          y: y
-        }, {
-          x: findSideX,
-          y: findSideY
-        }, 1, "purple");
-
-        outerAvg = avg;
-        outerTiming = new Line({
-          x: x,
-          y: y
-        }, {
-          x: findSideX,
-          y: findSideY
-        });
-
-      } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
-        drawLine(d, {
-          x: x,
-          y: y
-        }, {
-          x: findSideX,
-          y: findSideY
-        }, 1, "purple");
-
-        this.break();
-      }
-
-      drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
-      drawPixel(d, findSideX, findSideY, "rgba(" + Math.round(i*255) + ",0,0,1)", 1);
-    });
+    drawText(d, timingLines.innerTiming.p1.x, timingLines.innerTiming.p2.y, timingLines.count, "purple");
 
     done(null, stack);
   }, function(stack, done) {
@@ -879,68 +913,16 @@ function run(image, canvas) {
       name: "Verify Timing B"
     });
 
-    var a = lineAngle(stack.timingB);
-    var len = stack.timingA.length;
-    var offset = 0;
+    var timingLines = findTimingLines(stack.binaryArray, stack.timingB, stack.timingA);
+    if(timingLines.innerTiming)
+      drawLine(d, timingLines.innerTiming.p1, timingLines.innerTiming.p2, 1, "purple");
 
-    var outerAvg = -1;
-    var outerTiming;
-    var innerTiming;
+    if(timingLines.outerTiming)
+      drawLine(d, timingLines.outerTiming.p1, timingLines.outerTiming.p2, 1, "purple");
 
+    drawText(d, timingLines.innerTiming.p1.x, timingLines.innerTiming.p2.y, timingLines.count, "purple");
 
-    if(a>0) a = -(a);
-    traverseLine(stack.timingA.p2, stack.timingA.p1, function(x, y, i) {
-      var findSideX = x + Math.cos(a) * len;
-      var findSideY = y + Math.sin(a) * len;
-
-      var avg = getLineAverage(stack.binaryArray, {
-        x: x,
-        y: y
-      }, {
-        x: findSideX,
-        y: findSideY
-      });
-
-      if(!outerTiming && avg > MIN_AVG && avg < MAX_AVG) {
-        drawLine(d, {
-          x: x,
-          y: y
-        }, {
-          x: findSideX,
-          y: findSideY
-        }, 1, "yellow");
-
-        drawPixel(d,findSideX, findSideY, "red");
-
-        outerAvg = avg;
-        outerTiming = new Line({
-          x: x,
-          y: y
-        }, {
-          x: findSideX,
-          y: findSideY
-        });
-        console.log(avg);
-      } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
-        drawLine(d, {
-          x: x,
-          y: y
-        }, {
-          x: findSideX,
-          y: findSideY
-        }, 1, "purple");
-
-        this.break();
-        console.log(avg);
-      } else {
-        drawPixel(d,findSideX, findSideY, "red");
-      }
-
-      //drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
-      //drawPixel(d, findSideX, findSideY, "rgba(" + Math.round(i*255) + ",0,0,1)", 1);
-    });
-
-    done(null, stack);
+    //done(null, stack);
     return done(new Error("Not Implemented"));
     var d = debugCanvas(stack.blur, {
       blank: true,
