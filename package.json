@@ -4,6 +4,7 @@
   "dependencies": {
     "async": "^2.0.1",
     "debug": "^2.2.0",
+    "dom": "0.0.3",
     "intersect": "^1.0.1",
     "intersection": "0.0.1",
     "jquery": "~2.2.1",
@@ -15,5 +16,8 @@
     "build": "browserify index.js > bundle.js",
     "watch": "watchify index.js -o bundle.js -dv"
   },
-  "license": "AGPL-3.0"
+  "license": "AGPL-3.0",
+  "devDependencies": {
+    "watchify": "^3.7.0"
+  }
 }
