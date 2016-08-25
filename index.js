@@ -20,8 +20,8 @@ var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
 const STEP = 1 / 100;
 const MIN_AVG = 100;
-const MAX_AVG = 124;
-const AVG_DEVIATION = 90;
+const MAX_AVG = 134;
+const AVG_DEVIATION = 70;
 
 var canvasDebug = true;
 
@@ -763,6 +763,7 @@ function run(evt) {
   }), function(stack, done) {
     var d = debugCanvas(stack.canvas, {
       blank: true,
+      display: false,
       name: "Binary"
     });
 
@@ -845,7 +846,6 @@ function run(evt) {
           y: findSideY
         });
 
-        console.log(avg);
       } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
         drawLine(d, {
           x: x,
@@ -856,9 +856,6 @@ function run(evt) {
         }, 1, "purple");
 
         this.break();
-
-        console.log(avg);
-      } else {
       }
 
       drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
@@ -880,9 +877,11 @@ function run(evt) {
     var outerTiming;
     var innerTiming;
 
+
+    if(a>0) a = -(a);
     traverseLine(stack.timingA.p2, stack.timingA.p1, function(x, y, i) {
-      var findSideX = x - Math.cos(a) * len;
-      var findSideY = y - Math.sin(a) * len;
+      var findSideX = x + Math.cos(a) * len;
+      var findSideY = y + Math.sin(a) * len;
 
       var avg = getLineAverage(stack.binaryArray, {
         x: x,
@@ -899,7 +898,9 @@ function run(evt) {
         }, {
           x: findSideX,
           y: findSideY
-        }, 1, "purple");
+        }, 1, "yellow");
+
+        drawPixel(d,findSideX, findSideY, "red");
 
         outerAvg = avg;
         outerTiming = new Line({
@@ -921,10 +922,12 @@ function run(evt) {
 
         this.break();
         console.log(avg);
+      } else {
+        drawPixel(d,findSideX, findSideY, "red");
       }
 
-      drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
-      drawPixel(d, findSideX, findSideY, "rgba(" + Math.round(i*255) + ",0,0,1)", 1);
+      //drawPixel(d, x, y, "rgba(0," + Math.round(i*255) + ",0,1)", 1);
+      //drawPixel(d, findSideX, findSideY, "rgba(" + Math.round(i*255) + ",0,0,1)", 1);
     });
 
     done(null, stack);
