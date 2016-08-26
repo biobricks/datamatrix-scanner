@@ -93,6 +93,8 @@ function cloneCanvas(oldCanvas, opts) {
 
 var debugCanvases = [];
 
+var debugCanvasDisplay = true;
+
 function debugCanvas(canvas, opts) {
   if(!debugMode) return;
 
@@ -106,7 +108,7 @@ function debugCanvas(canvas, opts) {
   debugCanvases.push(d);
 
   var input = document.createElement("input");
-  input.checked = opts.display === false ? false : true;
+  input.checked = (opts.display === false || debugCanvasDisplay === false) ? false : true;
 
   input.type = "checkbox";
   input.addEventListener("change", function(evt) {
@@ -120,6 +122,10 @@ function debugCanvas(canvas, opts) {
     var label = document.createElement("label");
     label.textContent = opts.name;
     div.appendChild(label);
+  }
+
+  if(opts.halt) {
+    debugCanvasDisplay = false;
   }
 
   return d.getContext("2d");
@@ -467,7 +473,7 @@ function toGrayscale(imageData, method) {
 	return grayscale;
 };
 
-function getLineAverage(ctx, p1, p2) {
+function getLineAverage(ctx, p1, p2, d) {
 	var grayscale = ctx instanceof CanvasRenderingContext2D ? toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)) : ctx;
 
 	var diffX = p2.x - p1.x;
@@ -482,19 +488,14 @@ function getLineAverage(ctx, p1, p2) {
 	var y = 0;
   var count = -1; // initial switch sets to zero
   var bit = -1;
-  var lastBit = -1;
+
+  var thresh = 0;
 
 	while(i++ < diff) {
 		x = Math.round(p1.x + (i / diff)  * diffX) - 1;
 		y = Math.round(p1.y + (i / diff)  * diffY) - 1;
 
     bit = grayscale[y * ctx.canvas.width + x];
-
-    if(bit !== lastBit) {
-      console.log(bit);
-      count++;
-    }
-    lastBit = bit;
 
 		sum += Math.round(bit);
 	}
@@ -635,7 +636,7 @@ function drawDetectionLines(ctx, lines) {
   });
 }
 
-function findTimingLines(binaryArray, timingA, timingB) {
+function findTimingLines(binaryArray, timingA, timingB, d) {
   var a = lineAngle(timingA);
   var len = timingA.length;
   var offset = 0;
@@ -643,9 +644,6 @@ function findTimingLines(binaryArray, timingA, timingB) {
   var outerAvg = -1;
   var outerTiming;
   var innerTiming;
-
-  var countSum = 0;
-  var countAvg = 0;
 
   if(a < 0) a = -a;
 
@@ -661,11 +659,9 @@ function findTimingLines(binaryArray, timingA, timingB) {
     }, {
       x: findSideX,
       y: findSideY
-    });
+    }, d);
 
     var avg = lineAvg.average;
-    countSum += lineAvg.count;
-    countAvg++;
 
     if(!outerTiming && avg > MIN_AVG && avg < MAX_AVG) {
       outerAvg = avg;
@@ -692,7 +688,6 @@ function findTimingLines(binaryArray, timingA, timingB) {
 
   return {
     distance: innerTiming.p1.distance(outerTiming.p1),
-    count: Math.round(countSum / countAvg),
     innerTiming: innerTiming,
     outerTiming: outerTiming
   };
