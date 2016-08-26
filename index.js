@@ -21,6 +21,7 @@ const STEP = 1 / 100;
 const MIN_AVG = 100;
 const MAX_AVG = 134;
 const AVG_DEVIATION = 70;
+const COLOR_THRESHOLD = 55;
 
 var debugMode = true;
 var canvasDebug = debugMode;
@@ -868,7 +869,7 @@ function run(image, canvas) {
       blue = data[i + 2];
       alpha = data[i + 3] / 255;
 
-      var bit = ((red + green + blue) / 3) < 50 ? 255 : 0;
+      var bit = ((red + green + blue) / 3) < COLOR_THRESHOLD ? 255 : 0;
       var x = gi % canvas.width;
       var y = Math.floor(gi / canvas.width);
 
