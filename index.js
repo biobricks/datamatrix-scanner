@@ -53,16 +53,6 @@ Line.prototype = {
   }
 }
 
-function canBug(fn) {
-  return function(stack, done) {
-    if(canvasDebug) {
-      fn(stack, done);
-    } else {
-      done(null, stack);
-    }
-  }
-}
-
 function cloneCanvas(oldCanvas, opts) {
   opts = (opts || {});
 
@@ -856,7 +846,7 @@ function run(image, canvas) {
     stack.timingB = new Line(candidate.finderA.remote, stack.farCorner);
 
     done(null, stack);
-  }, canBug(function(stack, done) {
+  }, function(stack, done) {
     var d = debugCanvas(stack.blur, {
       blank: true,
       name: "Timing Lines"
@@ -877,7 +867,7 @@ function run(image, canvas) {
     );
 
     done(null, stack);
-  }), function(stack, done) {
+  }, function(stack, done) {
     // create a binary from the original
     // scan through the imageData averaging
     // each pixel like (R+G+B)/3
