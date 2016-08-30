@@ -919,11 +919,6 @@ function run(image, canvas) {
 
     done(null, stack);
   }, function(stack, done) {
-    var d = debugCanvas(stack.canvas, {
-      blank: true,
-      name: "Binary 'Grayscale'"
-    });
-
     stack.binaryArray = toGrayscale(stack.binaryImageData);
     stack.binaryArray.canvas = stack.binary;
 
@@ -1001,10 +996,6 @@ function run(image, canvas) {
 
     done(null, stack);
   }, function(stack, done) {
-
-
-    done(null, stack);
-  }, function(stack, done) {
     var grayscale = stack.binaryArray;
     var width = stack.blur.width;
 
@@ -1064,45 +1055,47 @@ function run(image, canvas) {
 
     done(null, stack);
   }, function(stack, done) {
-    return done(new Error("Not Implemented"));
+    stack.timingIntersect = intersection({
+      start: stack.timingCenterA.p1,
+      end: stack.timingCenterA.p2
+    }, {
+      start: stack.timingCenterB.p1,
+      end: stack.timingCenterB.p2
+    });
+
+    done(null, stack);
+  }, function(stack, done) {
+    // XXX: fix candidates[0] usage (AKA, create Queue)
     var d = debugCanvas(stack.blur, {
       blank: true,
       name: "Grid"
     });
 
-    var bitLenA = Math.round(stack.timingCenterA.length / stack.timingCountA);
-    var bitLenB = Math.round(stack.timingCenterB.length / stack.timingCountB);
+    drawPixel(d, stack.timingIntersect.x, stack.timingIntersect.y, "red", 1);
+
+    var bitLenA = (stack.timingCenterA.length / stack.timingCountA);
+    var bitLenB = (stack.timingCenterB.length / stack.timingCountB);
     var angleA = lineAngle(stack.timingCenterA);
     var angleB = lineAngle(stack.timingCenterB);
     var finderA = stack.candidates[0].finderA;
     var finderB = stack.candidates[0].finderB;
 
-    var FUDGE = 1.25;
+    var timingIntersect = stack.timingIntersect;
 
-    var startA = {
-      x: finderA.origin.x + Math.cos(angleA) * (bitLenA + bitLenA / FUDGE),
-      y: finderA.origin.y + Math.sin(angleA) * (bitLenA + bitLenA / FUDGE)
-    }
+    var F = 1.2;
+    var start = {
+      x: timingIntersect.x - Math.cos(angleA) * (bitLenA * F),
+      y: timingIntersect.y - Math.sin(angleB) * (bitLenB * F)
+    };
 
-    startA.x += Math.cos(angleB) * (bitLenA + bitLenA / FUDGE);
-    startA.y += Math.sin(angleB) * (bitLenA + bitLenA / FUDGE);
+    var end = {
+      x: timingIntersect.x - Math.cos(angleA) * (bitLenA * (stack.timingCountA - 2) * F),
+      y: timingIntersect.y - Math.sin(angleB) * (bitLenB * F)
+    };
 
-    var endA = {
-      x: finderA.remote.x - Math.cos(angleA) * (bitLenA + bitLenA / FUDGE),
-      y: finderA.remote.y - Math.sin(angleA) * (bitLenA + bitLenA / FUDGE)
-    }
+    drawPixel(d, start.x, start.y, "green", 3);
+    drawPixel(d, end.x, end.y, "red", 3);
 
-    endA.x += Math.cos(angleB) * (bitLenB + bitLenB / FUDGE);
-    endA.y += Math.sin(angleB) * (bitLenB + bitLenB / FUDGE);
-
-    traverseLine(startA, endA, {
-      step: bitLenA
-    }, function(x, y) {
-      drawPixel(d, x, y, "blue", 1);
-    });
-
-    drawPixel(d, startA.x, startA.y, "red", 1);
-    drawPixel(d, endA.x, endA.y, "red", 1);
 
     done(null, stack);
   }], function(err, stack) {
