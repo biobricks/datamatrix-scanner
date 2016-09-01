@@ -438,18 +438,17 @@ function moveAlong(point, dist, lineP1, lineP2) {
 }
 
 function toGrayscale(imageData, method) {
-  //debug("toGrayscale(" + [ imageData.width, imageData.height ] + ") " + imageData.data.length);
 	var grayscale = new Array(imageData.width * imageData.height);
 
 	var data = imageData.data;
 	var gi, red, green, blue, alpha, lightness, average, luminosity;
 
 	for(var i = 0; i < data.length; i += 4) {
-		gi = i / 4;
-		red = data[i];
-		green = data[i + 1];
-		blue = data[i + 2];
-		alpha = data[i + 3] / 255;
+    gi = i / 4;
+    red = data[i];
+    green = data[i + 1];
+    blue = data[i + 2];
+    alpha = data[i + 3] / 255;
 
     var rgb = [ red, green, blue ];
 
@@ -458,7 +457,7 @@ function toGrayscale(imageData, method) {
     luminosity = Math.round(0.21 * red + 0.72 * green + 0.07 * blue);
 
     grayscale[gi] = method === 0 ? lightness : method === 1 ? average : luminosity;
-	}
+  }
 
 	return grayscale;
 };
