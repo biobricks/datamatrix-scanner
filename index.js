@@ -688,8 +688,13 @@ function detectBit(binaryArray, x, y) {
 
 }
 
-function run(image, canvas, d) {
-  debugMode = d === true;
+function run(image, canvas, opts, cb) {
+  if(typeof opts === "function") {
+    cb = opts;
+    opts = {};
+  }
+
+  debugMode = opts.debug === true;
 
   async.waterfall([function(done) {
     console.log("Setting up stack");
@@ -1112,8 +1117,10 @@ function run(image, canvas, d) {
       var mod = i % timingCountA.count;
       var div = Math.floor(i / timingCountB.count);
 
+      if(!bits[mod]) bits[mod] = [];
+
       if(mod === 11 || div === 11) {
-        bits.push(1);
+        bits[mod].push(1);
         continue;
       }
 
@@ -1133,22 +1140,27 @@ function run(image, canvas, d) {
 
       let bitIndex = y * width + x;
       let bit = stack.binaryArray[bitIndex];
-      bits.push(bit === 0 ? 0 : 1);
+      bits[mod].push(bit === 0 ? 0 : 1);
 
       drawPixel(d, x, y, bit === 0?"red":"blue", 1);
     };
-    console.log((bits),bits.length);
-    console.log(JSON.stringify(bits));
+
+    // fill in last bit
+    bits[bits.length - 1].push(1);
+
+    stack.bits = bits;
 
     drawPixel(d, start.x, start.y, "green", 1);
     drawPixel(d, end.x, end.y, "red", 1);
 
     done(null, stack);
   }], function(err, stack) {
-    if(err) throw err;
+    if(debugMode) {
+      var time = (new Date()).valueOf() - stack.start;
+      console.log("Done! Took %s seconds", time / 1000);
+    }
 
-    var time = (new Date()).valueOf() - stack.start;
-    console.log("Done! Took %s seconds", time / 1000);
+    cb(err, stack.bits);
   });
 }
 
