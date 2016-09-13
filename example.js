@@ -6,7 +6,7 @@ var sample = "samples/" + (window.location.hash.length > 1 ? window.location.has
 var image = document.createElement("img");
 
 image.onload = function() {
-    biomatrix(image, $('#input'));
+    biomatrix(image, $('#input'), true);
 };
 image.src = sample;
 //image.src = "samples/sample1.jpg";

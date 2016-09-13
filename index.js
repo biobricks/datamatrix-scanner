@@ -686,7 +686,9 @@ function detectBit(binaryArray, x, y) {
 
 }
 
-function run(image, canvas) {
+function run(image, canvas, d) {
+  debugMode = d === true;
+
   async.waterfall([function(done) {
     console.log("Setting up stack");
 
@@ -1150,4 +1152,3 @@ function run(image, canvas) {
 
 
 module.exports = run;
-
