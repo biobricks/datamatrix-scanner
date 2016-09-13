@@ -4,6 +4,7 @@
   "dependencies": {
     "async": "^2.0.1",
     "debug": "^2.2.0",
+    "detect-node": "^2.0.3",
     "dom": "0.0.3",
     "intersect": "^1.0.1",
     "intersection": "0.0.1",
@@ -16,11 +17,13 @@
   },
   "scripts": {
     "build": "browserify example.js > bundle.js",
-    "watch": "watchify example.js -o bundle.js -dv"
+    "watch": "watchify example.js -o bundle.js -dv -r './node-canvas-fallback:canvas'",
+    "test": "tape test/test.js"
   },
   "license": "AGPL-3.0",
   "devDependencies": {
     "ecstatic": "^1.4.1",
+    "tape": "^4.6.0",
     "watchify": "^3.7.0"
   }
 }

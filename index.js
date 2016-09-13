@@ -1,4 +1,5 @@
 var async = require("async");
+var Canvas = require("canvas");
 var debug = require("debug");
 debug.enable("*");
 debug = debug("bbdm");
@@ -7,8 +8,9 @@ var xtend = require("xtend");
 var Vector = require("victor");
 var stackblur = require("stackblur-canvas");
 var lsd = require("line-segment-detector");
+var isNode = require("detect-node");
 
-var $ = document.querySelector.bind(document);
+var $ = !isNode ? document.querySelector.bind(document) : require("cheerio").load("<html><body></body></html>");
 
 var downSize = 400;
 
@@ -57,7 +59,7 @@ function cloneCanvas(oldCanvas, opts) {
   opts = (opts || {});
 
 	//create a new canvas
-	var newCanvas = document.createElement('canvas');
+	var newCanvas = new Canvas();
 	var context = newCanvas.getContext('2d');
 
 	//set dimensions
