@@ -1116,11 +1116,14 @@ function run(image, canvas, opts, cb) {
     for(var i = 0; i < len - 1; i++) {
       var mod = i % timingCountA.count;
       var div = Math.floor(i / timingCountB.count);
+      var idxMod = mod;
+      var idxDiv = timingCountB.count - div - 1;
 
-      if(!bits[mod]) bits[mod] = [];
+      if(!bits[idxMod]) {
+        bits[idxMod] = [1];
+      }
 
       if(mod === 11 || div === 11) {
-        bits[mod].push(1);
         continue;
       }
 
@@ -1140,13 +1143,13 @@ function run(image, canvas, opts, cb) {
 
       let bitIndex = y * width + x;
       let bit = stack.binaryArray[bitIndex];
-      bits[mod].push(bit === 0 ? 0 : 1);
+      bits[idxMod][idxDiv] = bit === 0 ? 0 : 1;
 
       drawPixel(d, x, y, bit === 0?"red":"blue", 1);
     };
 
-    // fill in last bit
-    bits[bits.length - 1].push(1);
+    for(i = 0; i < timingCountA.count; i++)
+      bits[bits.length - 1][i] = 1;
 
     stack.bits = bits;
 
