@@ -10,5 +10,9 @@
     "build": "browserify index.js > bundle.js",
     "watch": "watchify index.js -o bundle.js -dv"
   },
-  "license": "AGPL-3.0"
+  "license": "AGPL-3.0",
+  "devDependencies": {
+    "ecstatic": "^1.4.1",
+    "watchify": "^3.7.0"
+  }
 }
