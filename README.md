@@ -22,6 +22,14 @@ It makes use of the following algorithm:
 
 * ["LSD: a Line Segment Detector" by Gioi et al, Image Processing On Line, 2012](http://dx.doi.org/10.5201/ipol.2012.gjmr-lsd)
  
+# Getting started
+
+```
+npm install
+cp settings.js.example settings.js
+npm run build
+firefox index.html
+```
 
 # Future ToDo
 

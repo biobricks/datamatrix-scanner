@@ -38,7 +38,6 @@ function BitMatrix(image, opts) {
         this.height = height;
 
         var canvas;
-        console.trace(image);
         if(image.tagName !== 'CANVAS') {
             if(!document) {
                 canvas = new Canvas(width, height);
@@ -72,7 +71,6 @@ function BitMatrix(image, opts) {
         var areaHeight = Math.floor(height / sqrtNumArea);
         this.bits = new Array(width * height);
         var i, ay, ax, dy, dx, diff;
-        console.log("areaHeight", areaHeight);
         for (ay = 0; ay < sqrtNumArea; ay++) {
             for (ax = 0; ax < sqrtNumArea; ax++) {
                 for (dy = 0; dy < areaHeight; dy++) {

@@ -3,40 +3,42 @@
   <head>
     <meta charset="UTF-8"> 
     <title>bionet-datamatrix example</title>
-    <script src="line-segment-detector/index.js"></script>
-    <script src="stackblur.js"></script>
-    <script src="ransac.js"></script>
     <script src="bundle.js"></script>
     <style type="text/css">
-      #input {
+      img, canvas, .canvas-box {
+        height: 500px;
+        width: 500px;
+      }
+
+      .canvas-box {
         float: left;
-        border: 1px solid black;
+        margin-left: 100px;
+        position: relative;
+        width: 80%;
       }
 
-      #detect, #debug, #debugCanvas {
+      .canvas-box canvas {
         float: left;
-        border: 1px solid black;
+        position: absolute;
       }
 
-      #detect {
-        position: relative;
+      .canvas-layers {
+        background-color: gray;
+        height: 500px;
+        position: absolute;
+        width: 100px;
       }
 
-      #debugCanvas {
-        margin-top: -400px;
-        position: relative;
+      .canvas-layers label {
+        font-size: 8pt;
+        vertical-align: super;
       }
     </style>
   </head>
   <body>
-    
-    <img id="input" width="400"/>
-
-    <canvas id="debug" width="400" height="400"></canvas>
-    
-    <canvas id="detect" width="400" height="400"></canvas>
-    <canvas id="debugCanvas" width="400" height="400"></canvas>
-
-
+    <div class="canvas-box">
+      <canvas id="input" width="500" height="500"></canvas>
+    </div>
+    <div class="canvas-layers"></div>
   </body>
 </html>

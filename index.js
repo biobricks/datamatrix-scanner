@@ -1,16 +1,155 @@
-var debug = false;
-var $ = window.$ = window.jQuery = require('jquery');
-var xtend = require('xtend');
+var async = require("async");
+var debug = require("debug");
+debug.enable("*");
+debug = debug("bbdm");
+var intersection = require("intersection").intersect;
+var xtend = require("xtend");
+var Vector = require("victor");
+var stackblur = require("stackblur-canvas");
+var lsd = require("line-segment-detector");
 
-//var lsd = require('./line-segment-detector/index.js');
-var lsd = Module;
+var $ = document.querySelector.bind(document);
 
-var Detector = require('./jsdatamatrix/src/dm_detector.js');
-var BitMatrix = require('./jsdatamatrix/src/dm_bitmatrix.js');
+var downSize = 400;
 
-var DEFAULT_COLOR = 'rgba(0, 255, 0, 0.3)';
+var Detector = require("./jsdatamatrix/src/dm_detector.js");
+var BitMatrix = require("./jsdatamatrix/src/dm_bitmatrix.js");
 
-var image;
+var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
+
+const STEP = 1 / 100;
+const MIN_AVG = 100;
+const MAX_AVG = 134;
+const AVG_DEVIATION = 70;
+const COLOR_THRESHOLD = 55;
+
+var debugMode = true;
+var canvasDebug = debugMode;
+
+function Line(p1, p2) {
+  this.p1 = p1 instanceof Vector ? p1 : new Vector(p1.x, p1.y);
+  this.p2 = p2 instanceof Vector ? p2 : new Vector(p2.x, p2.y);
+}
+
+Line.prototype = {
+  get length() {
+    return this.p1.distance(this.p2);
+  },
+
+  get x1() {
+    return this.p1.x;
+  },
+
+  get x2() {
+    return this.p2.x;
+  },
+
+  get y1() {
+    return this.p1.y;
+  },
+
+  get y2() {
+    return this.p2.y;
+  }
+}
+
+function cloneCanvas(oldCanvas, opts) {
+  opts = (opts || {});
+
+	//create a new canvas
+	var newCanvas = document.createElement('canvas');
+	var context = newCanvas.getContext('2d');
+
+	//set dimensions
+	newCanvas.width = oldCanvas.width;
+	newCanvas.height = oldCanvas.height;
+
+  if(opts.blank !== true) {
+    //apply the old canvas to the new one
+    if(opts.preDraw) {
+      opts.preDraw(context);
+    }
+
+    context.drawImage(oldCanvas, 0, 0);
+
+    if(opts.postDraw) {
+      opts.postDraw(context);
+    }
+  }
+
+	//return the new canvas
+	return newCanvas;
+}
+
+var debugCanvases = [];
+
+var debugCanvasDisplay = true;
+
+function debugCanvas(canvas, opts) {
+  if(!debugMode) return;
+
+  var d = cloneCanvas(canvas, opts);
+  d.className = "debug-canvas";
+
+  var div = document.createElement("div");
+  document.querySelector(".canvas-layers").appendChild(div);
+
+  $(".canvas-box").appendChild(d);
+  debugCanvases.push(d);
+
+  var input = document.createElement("input");
+  input.checked = (opts.display === false || debugCanvasDisplay === false) ? false : true;
+
+  input.type = "checkbox";
+  input.addEventListener("change", function(evt) {
+    d.style.setProperty("display", evt.target.checked ? "block" : "none");
+  });
+  d.style.setProperty("display", input.checked ? "block" : "none");
+
+  div.appendChild(input);
+
+  if(opts.name) {
+    var label = document.createElement("label");
+    label.textContent = opts.name;
+    div.appendChild(label);
+  }
+
+  if(opts.halt) {
+    debugCanvasDisplay = false;
+  }
+
+  return d.getContext("2d");
+}
+
+function traverseLine(p1, p2, opts, cb, done) {
+  if(typeof opts === "function") {
+    done = cb;
+    cb = opts;
+    opts = {
+    };
+  }
+
+  if(!opts.step) opts.step = STEP;
+
+  var dist = pointDist(p1, p2);
+  var vx = p2.x - p1.x;
+  var vy = p2.y - p1.y;
+
+  var len = dist / opts.step;
+  for(var i = 0, broke = false; !broke && i < dist; i += opts.step) {
+    var d = i / dist;
+    var x = p1.x + (d * vx);
+    var y = p1.y + (d * vy);
+
+    cb.call({
+      break: function() {
+        broke = true;
+      }
+    }, x, y, d, len);
+  }
+
+  done && done();
+}
 
 function randomColor() {
   return "#" + Math.round(Math.random() * 0xffffff).toString(16);
@@ -21,8 +160,10 @@ function sampleToColor(sample) {
 }
 
 function drawLine(ctx, x1, y1, x2, y2, width, color) {
-  if(typeof x1 === 'object') {
-    if(typeof y1 === 'object') {
+  if(!debugMode) return;
+
+  if(typeof x1 === "object") {
+    if(typeof y1 === "object") {
       // received two point objects
       color = y2;
       width = x2;
@@ -40,7 +181,7 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
       x1 = x1.x1;
     }
   }
-  //    console.log("Drawing:", x1, y1, x2, y2, width, color);
+  //    debug("Drawing:", x1, y1, x2, y2, width, color);
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
@@ -49,13 +190,27 @@ function drawLine(ctx, x1, y1, x2, y2, width, color) {
   ctx.stroke();
 }
 
-function drawPixel(ctx, x, y, color) {
+function drawPixel(ctx, x, y, color, dim) {
+  if(!debugMode) return;
+
+  dim = dim || 2;
+  x -= dim / 2;
+  y -= dim / 2;
   ctx.fillStyle = color || DEFAULT_COLOR;
-  ctx.fillRect(x, y, 1, 1); 
+  ctx.fillRect(x, y, dim, dim); 
+}
+
+function drawText(ctx, x, y, str, color) {
+  if(!debugMode) return;
+
+  ctx.save();
+  ctx.fillStyle = color || DEFAULT_COLOR;
+  ctx.fillText(str, x, y);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawImageTo(img, ctx, downSize) {
-
   if(img.width > img.height) {
     var newHeight = downSize * img.height / img.width;
     ctx.drawImage(img, 0, Math.round((downSize - newHeight) / 2), downSize, newHeight);
@@ -66,14 +221,11 @@ function drawImageTo(img, ctx, downSize) {
 
 }
 
-function detectLines(img, canvas, blur) {
-  var ctx = canvas.getContext('2d');
+function detectLines(stack) {
+  var canvas = cloneCanvas(stack.ctx.canvas);
+  var ctx = canvas.getContext("2d");
 
-  var downSize = 400;
-
-  drawImageTo(img, ctx, downSize);
-
-  stackBlurCanvasRGBA(canvas, 0, 0, downSize, downSize, blur);
+  stackblur.canvasRGBA(canvas, 0, 0, downSize, downSize, blur);
 
   var bm = new BitMatrix(canvas, {grayscale: true});
   bm.brightnessAndContrast(80, 150);
@@ -85,88 +237,40 @@ function detectLines(img, canvas, blur) {
   var i, line;
   for(i=0; i < lines.length; i++) {
     line = lines[i];
-    line.p1 = {x: line.x1, y: line.y1};
-    line.p2 = {x: line.x2, y: line.y2};
-
-    //drawLine(ctx, line.x1, line.y1, line.x2, line.y2, undefined, "red");
+    line.p1 = new Vector(line.x1, line.y1);
+    line.p2 = new Vector(line.x2, line.y2);
   }
 
-  return {lines: lines, bitmatrix: bm};
-}
-
-function pointDist(p1, p2) {
-  return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+  return {lines: lines, bitmatrix: bm, canvas: canvas};
 }
 
 function dist(x1, y1, x2, y2) {
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 }
 
+function pointDist(p1, p2) {
+  return dist(p1.x, p1.y, p2.x, p2.y);
+}
+
 function lineLength(line) {
   return dist(line.x1, line.y1, line.x2, line.y2);
 }
 
-function minEndPointDistance(lineA, lineB) {
-  var val;
-  var min = 1000000;
-
-  val = pointDist(lineA.p1, lineB.p1);
-  if(val < min) {
-    min = val;
-    lineA.origin = lineA.p1;
-    lineA.remote = lineA.p2;
-    lineB.origin = lineA.p1;
-    lineB.remote = lineA.p2;
-  }
-  val = pointDist(lineA.p1, lineB.p2);
-  if(val < min) {
-    min = val;
-    lineA.origin = lineA.p1;
-    lineA.remote = lineA.p2;
-    lineB.origin = lineB.p2;
-    lineB.remote = lineB.p1;
-  }
-  val = pointDist(lineA.p2, lineB.p2);
-  if(val < min) {
-    min = val;
-    lineA.origin = lineA.p2;
-    lineA.remote = lineA.p1;
-    lineB.origin = lineB.p2;
-    lineB.remote = lineB.p1;
-  }
-  val = pointDist(lineA.p2, lineB.p1);
-  if(val < min) {
-    min = val;
-    lineA.origin = lineA.p2;
-    lineA.remote = lineA.p1;
-    lineB.origin = lineB.p1;
-    lineB.remote = lineB.p2;
-  }
-  return min;
-}
-
 function lineAngle(line) {
-  line.dy = line.y2 - line.y1;
   line.dx = line.x2 - line.x1;
-  if(line.dx == 0) {
-    line.angle = Math.PI * 1/4;
-  } else {
-    line.angle = Math.atan(line.dy / line.dx);
-  }
-  if(line.angle < 0) {
-    return Math.abs(line.angle) + Math.PI * 1/4;
-  }
+  line.dy = line.y2 - line.y1;
+  line.angle = Math.atan(line.dy / line.dx);
 
   return line.angle;
 }
 
 
 // returns the smallest angle between two lines
-function smallestAngleBetween(lineA, lineB) {
-  lineA.angle = lineAngle(lineA);
-  lineB.angle = lineAngle(lineB);
+function smallestAngleBetween(finderA, finderB) {
+  finderA.angle = lineAngle(finderA);
+  finderB.angle = lineAngle(finderB);
 
-  var diff = Math.abs(lineB.angle - lineA.angle);
+  var diff = Math.abs(finderB.angle - finderA.angle);
 
   if(diff > Math.PI) {
     diff = diff - Math.PI;
@@ -175,52 +279,108 @@ function smallestAngleBetween(lineA, lineB) {
   return diff;
 }
 
+
 // find the datamatrix L shape from the lines detected by LSD
 function findL(lines, opts) {
-  opts = xtend({
-    maxLineStartDistance: 15, // max distance between L line starting points
-    angleMin: 75, // minimum angle of smallest angle between L lines
-    maxLineLengthDifference: 0.15, // max length difference between L lines
-    lineMinLength: 50 // minimum L line length
-  }, opts || {});
+  var d = debugCanvas(opts.ctx.canvas, {
+    blank: true,
+    display: false,
+    name: "findL"
+  });
 
-  opts.angleMin = opts.angleMin * (Math.PI / 180);
+  var minLen = 40;
+  var maxDist = 5;
+  var maxLineDiff = 10;
+  var r = [];
+  
+  function validateAngle(finderA, finderB) {
+    var originDist = finderA.origin.distance(finderB.origin);
 
-  var i, j, line, lineA, lineB, len;
+    if(originDist < maxDist) {
+      //drawLine(d, finderA.p1, finderB.p1, 1, "pink");
+      //drawLine(d, finderA.p1, finderB.p2, 2, "pink");
+      //drawLine(d, finderB.p1, finderA.p1, 1, "pink");
+      drawLine(d, finderB.p1, finderB.p2, 3, "rgba(255, 0, 0, 0.5)");
+      drawLine(d, finderA.p1, finderA.p2, 3, "rgba(0, 0, 255, 0.5)");
 
-  // filter lines
-  var fLines = [];
-  for(i=0; i < lines.length; i++) {
-    line = lines[i];
-    len = lineLength(line);
-    if(len >= opts.lineMinLength) {
-      line.length = len;
-      fLines.push(line);
+      var relAngle = smallestAngleBetween(finderA, finderB);
+
+      if(relAngle > 1.4 && relAngle < 1.6) {
+        drawLine(d, finderB.remote, finderA.remote, 1, "pink");
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  for(var i = 0; i < lines.length; i++) {
+    var finderA = lines[i];
+    var lenA = finderA.p1.distance(finderA.p2);
+    finderA.length = lenA;
+
+    // try to discard this earlier
+    if(lenA < minLen) continue;
+
+    for(var j = 0; j < lines.length; j++) {
+      var finderB = lines[j];
+      if(j === i) continue;
+      if(finderA === finderB) continue;
+
+      if(finderA === finderB) continue;
+      if(
+          finderA.p1.x === finderB.p1.x ||
+          finderA.p1.y === finderB.p1.y ||
+          finderA.p2.x === finderB.p2.x ||
+          finderA.p2.y === finderB.p2.y
+        ) continue;
+
+      var lenB = finderB.p1.distance(finderB.p2);
+      finderB.length = lenB;
+
+      // try to discard this earlier
+      if(lenB < minLen) continue;
+
+      if(Math.abs(finderA.length - finderB.length) > maxLineDiff) continue;
+
+      setEndPoints(finderA, finderB);
+
+      if(validateAngle(finderA, finderB)) {
+        r.push({
+          finderA: finderA,
+          finderB: finderB
+        });
+      }
     }
   }
 
-  var distRes;
-  var lCandidates = [];
-  for(i=0; i < fLines.length; i++) {
-    lineA = fLines[i];
-    for(j=i+1; j < fLines.length; j++) {
-      lineB = fLines[j];
-      if(Math.abs(lineA.length - lineB.length) / ((lineA.length + lineB.length) / 2) > opts.maxLineLengthDifference) {
-        continue;
-      }
+  return r;
+}
 
-      if(minEndPointDistance(lineA, lineB) > opts.maxLineStartDistance) {
-        continue;
-      }
+function averagePoints(p1, p2) {
+  return new Vector((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+}
 
-      if(smallestAngleBetween(lineA, lineB) < opts.angleMin) {
-        continue;
-      }
+function setEndPoints(finderA, finderB) {
+  var pairs = ([
+    [ finderA.p1, finderB.p1 ],
+    [ finderA.p1, finderB.p2 ],
+    [ finderA.p2, finderB.p1 ],
+    [ finderA.p2, finderB.p2 ]
+  ]).sort(function(a, b) {
+    a[2] = a[0].distance(a[1]);
+    b[2] = b[0].distance(b[1]);
+    return a[2] > b[2];
+  });
 
-      lCandidates.push({lineA: lineA, lineB: lineB});
-    }
-  }
-  return lCandidates;
+  // origin points based on closest in caparative lines
+  var averageOrigin = averagePoints(pairs[0][0], pairs[0][1]);
+
+  finderA.origin = pairs[0][0];
+  finderB.origin = pairs[0][1];
+
+  finderA.remote = (finderA.origin === finderA.p1) ? finderA.p2 : finderA.p1;
+  finderB.remote = (finderB.origin === finderB.p1) ? finderB.p2 : finderB.p1;
 }
 
 // difference between two points
@@ -260,20 +420,6 @@ function getSquareColor(drawCtx, bm, x, y) {
   avg += bm.get(x-1, y+1);
   avg += bm.get(x-1, y-1);
 
-  /*
-     if(debug) {
-     drawPixel(drawCtx, x, y);
-     drawPixel(drawCtx, x+1, y);
-     drawPixel(drawCtx, x, y+1);
-     drawPixel(drawCtx, x-1, y);
-     drawPixel(drawCtx, x, y-1);
-     drawPixel(drawCtx, x+1, y+1);
-     drawPixel(drawCtx, x+1, y-1);
-     drawPixel(drawCtx, x-1, y+1);
-     drawPixel(drawCtx, x-1, y-1);
-     }
-     */
-
   avg = avg / 9;
   return avg;
 }
@@ -292,18 +438,17 @@ function moveAlong(point, dist, lineP1, lineP2) {
 }
 
 function toGrayscale(imageData, method) {
-  //console.log("toGrayscale(" + [ imageData.width, imageData.height ] + ") " + imageData.data.length);
 	var grayscale = new Array(imageData.width * imageData.height);
 
 	var data = imageData.data;
 	var gi, red, green, blue, alpha, lightness, average, luminosity;
 
 	for(var i = 0; i < data.length; i += 4) {
-		gi = i / 4;
-		red = data[i];
-		green = data[i + 1];
-		blue = data[i + 2];
-		alpha = data[i + 3] / 255;
+    gi = i / 4;
+    red = data[i];
+    green = data[i + 1];
+    blue = data[i + 2];
+    alpha = data[i + 3] / 255;
 
     var rgb = [ red, green, blue ];
 
@@ -312,13 +457,13 @@ function toGrayscale(imageData, method) {
     luminosity = Math.round(0.21 * red + 0.72 * green + 0.07 * blue);
 
     grayscale[gi] = method === 0 ? lightness : method === 1 ? average : luminosity;
-	}
+  }
 
 	return grayscale;
 };
 
-function getLineAverage(ctx, p1, p2) {
-	var grayscale = toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width));
+function getLineAverage(ctx, p1, p2, d) {
+	var grayscale = ctx instanceof CanvasRenderingContext2D ? toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)) : ctx;
 
 	var diffX = p2.x - p1.x;
 	var diffY = p2.y - p1.y;
@@ -330,37 +475,38 @@ function getLineAverage(ctx, p1, p2) {
 	var sum = 0;
 	var x = 0;
 	var y = 0;
-  var counts = {};
+  var count = -1; // initial switch sets to zero
+  var bit = -1;
+
+  var thresh = 0;
 
 	while(i++ < diff) {
 		x = Math.round(p1.x + (i / diff)  * diffX) - 1;
 		y = Math.round(p1.y + (i / diff)  * diffY) - 1;
 
-		sum += Math.round(grayscale[y * ctx.canvas.width + x]);
-    //if(grayscale[y * ctx.canvas.width + x] < 50)
-    //drawPixel(ctx, x, y, "yellow");
+    bit = grayscale[y * ctx.canvas.width + x];
+
+		sum += Math.round(bit);
 	}
 
 	average = Math.round(sum / diff);
 
-  if(average > 127 && average < 175) {
-   // drawLine(ctx, p1, p2, undefined, "rgba(" + average +", 0, 0, .5)");
-  } else {
-    //drawLine(ctx, p1, p2, undefined, "rgba(0, 0, 255, .5)");
-  }
-
-	return average;
+	return {
+    average: average,
+    count: count
+  };
 }
 
 // check if this is actually a dotted line
 // by sampling along the line
 //
-// *NOT TRUE \/* This only check IF it's dotted
+// *NOT TRUE \/* This only check IF it"s dotted
 // and return corrected line that is closer
 // to running through the middle of squares
 function verifyDottedLine(drawCtx, bm, p1, p2) {
+  console.error("this shouldn't happen. verifyDottedLine");
   var average = getLineAverage(drawCtx, p1, p2);
-  console.log("Line average: %s", average);
+  //debug("Line average: %s", average);
 
   if(average < 110)
     return true;
@@ -371,8 +517,8 @@ function verifyDottedLine(drawCtx, bm, p1, p2) {
 // find the outer edge of the dotted line
 function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   var line;
-  p1 = xtend({}, p1Orig, {});
-  p2 = xtend({}, p2Orig, {});
+  var p1 = new Vector(p1Orig.x, p1Orig.y);
+  var p2 = new Vector(p2Orig.x, p2Orig.y);
 
   var validStart = [];
   var validEnd = [];
@@ -381,24 +527,19 @@ function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   // since a line is 12 squares long
   var stepSize = 1/96;
 
-  // We're starting with a line that's probably at the edge of the dotted lines.
-  // Now we'll slide that line back and forth along the axis of 
+  // We"re starting with a line that"s probably at the edge of the dotted lines.
+  // Now we"ll slide that line back and forth along the axis of 
   // the other dotted line and log where alternating dot patter begins and ends.
   // This will allow us to find the center of the dotted line.
 
   p1 = moveAlong(p1, -stepSize*10, lineP1, lineP2);
   p2 = moveAlong(p2, -stepSize*10, lineP1, lineP2);    
 
-  drawLine(drawCtx, p1, p2, undefined, 'rgba(0, 255, 0, 1)');
-
   for(var i=0; i < 28; i++) {
     p1 = moveAlong(p1, stepSize, lineP1, lineP2);
     p2 = moveAlong(p2, stepSize, lineP1, lineP2);
 
-    drawLine(drawCtx, p1, p2, undefined, 'rgba(255, 0, 0, ' + (i/28) + ')');
-
     line = verifyDottedLine(drawCtx, bm, p1, p2);
-    drawLine(drawCtx, line, "green");
     if(line) {
       if(validStart.length === 0) {
         validStart = [{
@@ -428,12 +569,6 @@ function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   }
   console.log(validStart, validEnd);
 
-  drawPixel(drawCtx, validStart[0].x, validStart[0].y, "green");
-  drawPixel(drawCtx, validEnd[0].x, validEnd[0].y, "green");
-
-  drawPixel(drawCtx, validStart[1].x, validStart[1].y, "red");
-  drawPixel(drawCtx, validEnd[1].x, validEnd[1].y, "red");
-
   var startX = validStart[0].x;
   var startY = validStart[0].y;
 
@@ -441,182 +576,578 @@ function findDottedLineCenter(drawCtx, bm, p1Orig, p2Orig, lineP1, lineP2) {
   var endY = validStart[1].y - ((validEnd[0].x - validStart[0].x));
 
   return {
-    p1: {
-      x: startX,
-      y: startY
-    },
-    p2: {
-      x: endX,
-      y: endY
-    }
+    p1: new Vector(startX, startY),
+    p2: new Vector(endX, endY)
   }
 }
 
-// sample the pattern and return a 10x10 bit matrix
-// the startpoint is the middle of the square where the two dotted lines intersect
-// lineA and lineB are the two dotted lines
-function samplePattern(startPoint, lineA, lineB) {
 
-}
-
-function findDottedLines(bm, drawCtx, lineA, lineB, opts) {
+function findDottedLines(bm, drawCtx, finderA, finderB, opts) {
   var diff, p1, p2, avg;
   var out = {};
 
-  diff = pointDiff(lineA.origin, lineB.origin);
-  p1 = pointAdd(lineA.remote, diff);
-  p2 = pointSub(lineB.remote, diff);
-  diff = pointDiff(lineA.origin, lineA.remote);
+  diff = pointDiff(finderA.p1, finderB.p2);
+  p1 = pointAdd(finderA.p2, diff);
+  p2 = pointSub(finderB.p2, diff);
+  diff = pointDiff(finderA.p1, finderA.p2);
   p2 = pointAdd(p2, diff);
 
-  //drawLine(drawCtx, p1, p2, undefined, "rgba(0,0,255,0.4)");
-  out.lineA = findDottedLineCenter(drawCtx, bm, p1, p2, lineA.origin, lineA.remote);
+  out.finderA = findDottedLineCenter(drawCtx, bm, p1, p2, finderA.origin, finderA.remote);
 
-  if(!out.lineA) {
+  if(!out.finderA) {
     console.log("Didn't find dotted line center");
     return;
   }
 
-  //drawLine(drawCtx, out.lineA.p1, out.lineA.p2, undefined,  "yellow");
-  drawPixel(drawCtx, out.lineA.p1.x, out.lineA.p1.y, "green");
-  drawPixel(drawCtx, out.lineA.p2.x, out.lineA.p2.y, "red");
-  if(!out.lineA) {
+  if(!out.finderA) {
     console.log("Failed to find dotted line center.");
     return false;
   }
 
-  //drawLine(drawCtx, out.lineA.p1, out.lineA.p2, undefined, 'RGBA(255, 0, 0, 0.4)');
-
-  diff = pointDiff(lineA.origin, lineB.origin);
-  p1 = pointAdd(lineB.remote, diff);
-  p2 = pointAdd(lineA.remote, diff);
-  diff = pointDiff(lineB.origin, lineB.remote);
+  diff = pointDiff(finderA.origin, finderB.origin);
+  p1 = pointAdd(finderB.remote, diff);
+  p2 = pointAdd(finderA.remote, diff);
+  diff = pointDiff(finderB.origin, finderB.remote);
   p2 = pointAdd(p2, diff);
-  out.lineB = {p1: p1, p2: p2};
+  out.finderB = {
+    p1: new Vector(p1.x, p1.y),
+    p2: new Vector(p2.x, p2.y)
+  };
 
-  //drawLine(drawCtx, p1, p2, 'rgba(255, 0, 0, 1)');
-  //drawLine(drawCtx, lineB.origin, lineB.remote, p2, 'rgba(255, 0, 0, 1)');
-  out.lineB = findDottedLineCenter(drawCtx, bm, p1, p2, lineB.origin, lineB.remote);
-  console.log(out);
-  //drawLine(drawCtx, out.lineB.p1, out.lineB.p2, undefined,  "yellow");
-  drawPixel(drawCtx, out.lineB.p1.x, out.lineB.p1.y, "green");
-  drawPixel(drawCtx, out.lineB.p2.x, out.lineB.p2.y, "red");
+  out.finderB = findDottedLineCenter(drawCtx, bm, p1, p2, finderB.origin, finderB.remote);
 
   return out;
 }
 
-function performanceTest(img, canvas, seconds) {
-  seconds = seconds || 10;
-  var ms = seconds * 1000;
-  var start = (new Date).getTime();
-  var count = 0;
-
-  while(true) {
-    detectLines(img, canvas);
-    count++;
-    if((new Date).getTime() - start >= ms) {
-      break;
-    }
-  }
-  var opsPerSec = count / seconds
-    console.log("Iterations per seconds:", opsPerSec);
+function drawDetectionLines(ctx, lines) {
+  lines.forEach(function(line) {
+    drawLine(ctx, line.p1, line.p2, 1, "green");
+  });
 }
 
+function findTimingLines(binaryArray, timingA, timingB, d) {
+  var a = lineAngle(timingA);
+  var len = timingA.length;
+  var offset = 0;
 
-function run() {
+  var outerAvg = -1;
+  var outerTiming;
+  var innerTiming;
 
-  var canvas = $('#debug')[0];
-  var img = $('#input')[0];
-  var ctx = canvas.getContext('2d');
+  if(a < 0) a = -a;
 
-  var detect= $('#detect');
-  var detectCtx = detect[0].getContext('2d');
-  drawImageTo(img, detectCtx, 400);
+  traverseLine(timingB.p2, timingB.p1, function(x, y, i) {
+    // this needs to be smarter
+    // it should determine if A is + or - of B
+    var findSideX = x - Math.cos(a) * len;
+    var findSideY = y - Math.sin(a) * len;
 
-  var debugCanvas = $("#debugCanvas")[0];
-  var debugCtx = debugCanvas.getContext("2d");
+    var lineAvg = getLineAverage(binaryArray, {
+      x: x,
+      y: y
+    }, {
+      x: findSideX,
+      y: findSideY
+    }, d);
 
-  var i = 0;
-  detect.on("mousemove", function(e) {
-    var x = e.offsetX;
-    var y = e.offsetY;
+    var avg = lineAvg.average;
 
-    var imageData = ctx.getImageData(x, y, 1, 1);
-    //console.log("%c█", "color:rgba(" + imageData.data + ")");
+    if(!outerTiming && avg > MIN_AVG && avg < MAX_AVG) {
+      outerAvg = avg;
+      outerTiming = new Line({
+        x: x,
+        y: y
+      }, {
+        x: findSideX,
+        y: findSideY
+      });
+
+    } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
+      innerTiming = new Line({
+        x: x,
+        y: y
+      }, {
+        x: findSideX,
+        y: findSideY
+      });
+
+      return this.break();
+    }
   });
 
-  var o;
-  var blur;
-  var candidates;
-
-	var grayscale = toGrayscale(detectCtx.getImageData(0, 0, detectCtx.canvas.height, detectCtx.canvas.width));
-
-  for(blur=4; blur <= 12; blur+=2) {
-    o = detectLines(img, canvas, blur);
-
-    console.log("Found", o.lines.length, "line segments");
-    /*
-
-       var i, line;
-       for(i=0; i < lines.length; i++) {
-       line = lines[i];
-       console.log("Line:", line);
-       drawLine(ctx, line.x1, line.y1, line.x2, line.y2, line.width);
-       }
-       */
-
-    candidates = findL(o.lines);
-    console.log("For blur:", blur, "Found", candidates.length, "L-shape candidates");
-    if(candidates.length) break;
-  }
-
-  var i, c, dottedLines;
-  for(i=0; i < candidates.length; i++) {
-    c = candidates[i];
-    dottedLines = findDottedLines(o.bitmatrix, detectCtx, c.lineA, c.lineB);
-
-    if(dottedLines && dottedLines.lineA) break;
-  }
-
-  if(!dottedLines) {
-    console.log("Didn't find dotted line");
-    return;
-  }
-
-  drawLine(debugCtx, c.lineA.p1, c.lineA.p2, 1, "yellow");
-  drawLine(debugCtx, c.lineB.p1, c.lineB.p2, 1, "yellow");
-
-  drawLine(debugCtx, dottedLines.lineA.p1, dottedLines.lineA.p2, 1, "yellow");
-  drawLine(debugCtx, dottedLines.lineB.p1, dottedLines.lineB.p2, 1, "yellow");
-
-  var rect = {
-    x: c.lineA.p2.x,
-    y: c.lineA.p2.y,
-    width: pointDist(c.lineB.p1, dottedLines.lineA.p1),
-    height: pointDist(c.lineA.p2, dottedLines.lineB.p1)
+  return {
+    distance: innerTiming.p1.distance(outerTiming.p1),
+    innerTiming: innerTiming,
+    outerTiming: outerTiming
   };
+}
 
-  debugCtx.fillStyle = "rgba(128, 0, 128, 0.5)";
-  debugCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
-  debugCtx.fill();
+function detectBit(binaryArray, x, y) {
 
-  drawLine(debugCtx, c.lineB.p1, dottedLines.lineA.p1, 1, "pink");
-  drawLine(debugCtx, c.lineA.p2, dottedLines.lineB.p1, 1, "pink");
+}
 
-  for(var ix = Math.round(rect.x); ix < Math.round(rect.x + rect.width); ix++) {
-    for(var iy = Math.round(rect.y); iy < Math.round(rect.y + rect.height); iy++) {
-      var sample = grayscale[iy * ctx.canvas.width + ix];
-      drawPixel(detectCtx, ix, iy, sampleToColor(sample));
+function run(image, canvas) {
+  async.waterfall([function(done) {
+    console.log("Setting up stack");
+
+    var ctx = canvas.getContext("2d");
+
+    var stack = {
+      canvas: canvas,
+      ctx: ctx,
+      grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)),
+      img: image,
+      start: (new Date).valueOf()
     }
-  }
+
+    drawImageTo(stack.img, stack.ctx, downSize);
+
+    done(null, stack);
+  }, function(stack, done) {
+    // Cycle through blur levels until LSD finds
+    // candidate lines
+    for(blur=4; blur <= 4; blur+=2) {
+      var lineDetect = detectLines(stack);
+
+      debugCanvas(lineDetect.canvas, {
+        display: false,
+        name: "Blur: " + blur
+      });
+
+      var d = debugCanvas(stack.ctx.canvas, {
+        blank: true,
+        name: "Detect Lines (blur: " + blur + ")"
+      });
+
+      drawDetectionLines(d, lineDetect.lines);
+
+      var candidates = findL(lineDetect.lines, stack);
+      if(candidates.length > 0) {
+        console.log("Found candidates at %s blur level", blur);
+
+        stack.bitmatrix = lineDetect.bm;
+        stack.blur = lineDetect.canvas;
+
+        var blurCtx = stack.blur.getContext("2d")
+        stack.blurCtx = blurCtx;
+        stack.blurGrayscale = toGrayscale(blurCtx.getImageData(0, 0, blurCtx.canvas.height, blurCtx.canvas.width));
+        stack.blurGrayscale.canvas = lineDetect.canvas;
+
+        stack.candidates = candidates;
+
+        return done(null, stack);
+      }
+    }
+
+    done(new Error("No Canidates Found"));
+  }, function(stack, done) {
+    // Cycle through the candidate pairs finding their
+    // nearest points and average those together.
+    // TODO: Split function into generation and debugging
+    // *OLD NOTE*
+    // by this point candidates should be pairs,
+    // this will fix some issues around double
+    // processing. This will also help ensure
+    // finderA is across from timingA, B/B, etc.
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Candidates " + stack.candidates.length
+    });
+
+    // From here each set of candidates should be tested
+    // this can be accomplished by taking the rest of
+    // the waterfall and moving it into an async.Queue
+    // XXX: Use Queue to process each candidate.
+    for(var i = 0; i < stack.candidates.length; i++) {
+      var finderA = stack.candidates[i].finderA;
+      var finderB = stack.candidates[i].finderB;
+
+      if(finderA === finderB) continue;
+
+      var averageOrigin = averagePoints(finderA.origin, finderB.origin);
+      finderA.origin = finderB.origin = averageOrigin;
+
+      drawLine(d, finderA.origin, finderA.remote, 1, "red");
+      drawLine(d, finderB.origin, finderB.remote, 1, "red");
+
+      drawText(d,
+          (finderA.p1.x + finderA.p2.x) / 2,
+          (finderA.p1.y + finderA.p2.y) / 2,
+          "A", "red"
+          );
+
+      drawText(d,
+          (finderB.p1.x + finderB.p2.x) / 2,
+          (finderB.p1.y + finderB.p2.y) / 2,
+          "B", "red"
+          );
+    }
+
+    done(null, stack);
+  }, function(stack, done) {
+    // Determine the Far Corner by finder to points.
+    // Each point is at the angle its opposite Finder
+    // along the average length of the Finders.
+    // The points are then averaged to create
+    // the Far Corner.
+    // TODO: Split function into generation and debugging
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Far Corner"
+    });
+
+    var candidate = stack.candidates[0];
+    var finderA = candidate.finderA;
+    var finderB = candidate.finderB;
+    var remoteA = finderA.remote;
+    var remoteB = finderB.remote;
+
+    drawPixel(d, remoteA.x, remoteA.y, "pink", 1);
+    drawPixel(d, remoteB.x, remoteB.y, "pink", 1);
+
+    // this can be improved by finding the point
+    // at (finderAdeg + finderBdeg) / 2
+    // len finderA.remote <> finderB.remote
+    // and averaging it with xc/yc
+    var len = (finderB.length + finderA.length) / 2;
+    var aA = lineAngle(finderA);
+    var aB = lineAngle(finderB);
+
+    var ax = Math.cos(aA) * finderB.length + remoteB.x;
+    var ay = Math.sin(aA) * finderB.length + remoteB.y;
+    var bx = Math.cos(aB) * finderA.length + remoteA.x;
+    var by = Math.sin(aB) * finderA.length + remoteA.y;
+
+    var x = (ax + bx) / 2;
+    var y = (ay + by) / 2;
+
+    drawPixel(d, ax, ay, "pink", 1);
+    drawPixel(d, bx, by, "pink", 1);
+    drawPixel(d, x, y, "pink", 1);
+
+    stack.farCorner = new Vector(x, y);
+
+    done(null, stack);
+  }, function(stack, done) {
+    // Create square outline based on the
+    // Finders and the Far Corner
+    // XXX: fix candidates[0] usage
+    var candidate = stack.candidates[0];
+
+    stack.square = [ candidate.finderA.origin, candidate.finderA.remote, stack.farCorner, candidate.finderB.remote ];
+
+    done(null, stack);
+  }, function(stack, done) {
+    // Create Timing Lines based on the
+    // remote Finder Line and the Far Corner
+    // XXX: fix candidates[0] usage
+    var candidate = stack.candidates[0];
+
+    stack.timingA = new Line(candidate.finderB.remote, stack.farCorner);
+    stack.timingB = new Line(candidate.finderA.remote, stack.farCorner);
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Timing Lines"
+    });
+
+    drawLine(d, stack.timingA.p1, stack.timingA.p2, 1, "orange");
+    drawLine(d, stack.timingB.p1, stack.timingB.p2, 1, "orange");
+    drawText(d,
+        (stack.timingA.p1.x + stack.timingA.p2.x) / 2,
+        (stack.timingA.p1.y + stack.timingA.p2.y) / 2,
+        "A", "orange"
+    );
+
+    drawText(d,
+        (stack.timingB.p1.x + stack.timingB.p2.x) / 2,
+        (stack.timingB.p1.y + stack.timingB.p2.y) / 2,
+        "B", "orange"
+    );
+
+    done(null, stack);
+  }, function(stack, done) {
+    // create a binary from the original
+    // scan through the imageData averaging
+    // each pixel like (R+G+B)/3
+    // it is set white if below COLOR_THRESHOLD
+    // TODO: Split function into generation/debugging
+
+    var d = debugCanvas(stack.canvas, {
+      blank: true,
+      display: false,
+      name: "Binary"
+    });
+
+    var binCanvas = cloneCanvas(stack.canvas);
+    var binCtx = binCanvas.getContext("2d");
+    var canvas = stack.canvas;
+    var data = stack.ctx.getImageData(0, 0, canvas.height, canvas.width).data;
+
+    var gi, red, green, blue, alpha;
+
+    stack.bin = [];
+
+    for(var i = 0; i < data.length; i += 4) {
+      gi = i / 4;
+      red = data[i];
+      green = data[i + 1];
+      blue = data[i + 2];
+      alpha = data[i + 3] / 255;
+
+      var bit = ((red + green + blue) / 3) < COLOR_THRESHOLD ? 255 : 0;
+      var x = gi % canvas.width;
+      var y = Math.floor(gi / canvas.width);
+
+      drawPixel(binCtx, x, y, bit ? "black" : "white");
+      drawPixel(d, x, y, bit ? "black" : "white");
+      stack.bin.push(bit);
+    }
+
+    stack.binary = binCanvas;
+    stack.binaryImageData = binCtx.getImageData(0, 0, binCanvas.width, binCanvas.height);
+    stack.binaryArray = toGrayscale(stack.binaryImageData);
+    stack.binaryArray.canvas = stack.binary;
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      display: false,
+      blank: true,
+      name: "Verify Timing A"
+    });
+
+    var timingLines = findTimingLines(stack.binaryArray, stack.timingA, stack.timingB, d);
+    if(timingLines.innerTiming)
+      drawLine(d, timingLines.innerTiming.p1, timingLines.innerTiming.p2, 1, "purple");
+
+    if(timingLines.outerTiming)
+      drawLine(d, timingLines.outerTiming.p1, timingLines.outerTiming.p2, 1, "purple");
+
+    stack.innerTimingA = timingLines.innerTiming;
+    stack.outerTimingA = timingLines.outerTiming;
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      display: false,
+      blank: true,
+      name: "Verify Timing B"
+    });
+
+    var timingLines = findTimingLines(stack.binaryArray, stack.timingB, stack.timingA, d);
+    if(timingLines.innerTiming)
+      drawLine(d, timingLines.innerTiming.p1, timingLines.innerTiming.p2, 1, "purple");
+
+    if(timingLines.outerTiming)
+      drawLine(d, timingLines.outerTiming.p1, timingLines.outerTiming.p2, 1, "purple");
+
+    stack.innerTimingB = timingLines.innerTiming;
+    stack.outerTimingB = timingLines.outerTiming;
+
+    done(null, stack);
+  }, function(stack, done) {
+    // Find the center of each timing line
+    // by averaging the x/y of each endpoint
+    stack.timingCenterA = new Line({
+      x: (stack.innerTimingA.p1.x + stack.outerTimingA.p1.x) / 2,
+      y: (stack.innerTimingA.p1.y + stack.outerTimingA.p1.y) / 2
+    }, {
+      x: (stack.innerTimingA.p2.x + stack.outerTimingA.p2.x) / 2,
+      y: (stack.innerTimingA.p2.y + stack.outerTimingA.p2.y) / 2
+    });
+
+    stack.timingCenterB = new Line({
+      x: (stack.innerTimingB.p1.x + stack.outerTimingB.p1.x) / 2,
+      y: (stack.innerTimingB.p1.y + stack.outerTimingB.p1.y) / 2
+    }, {
+      x: (stack.innerTimingB.p2.x + stack.outerTimingB.p2.x) / 2,
+      y: (stack.innerTimingB.p2.y + stack.outerTimingB.p2.y) / 2
+    });
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      display: false,
+      blank: true,
+      name: "Timing B Center"
+    });
+
+    drawLine(d, stack.timingCenterB.p1, stack.timingCenterB.p2, 1, "yellow");
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      display: false,
+      blank: true,
+      name: "Timing A Center"
+    });
+
+    drawLine(d, stack.timingCenterA.p1, stack.timingCenterA.p2, 1, "yellow");
+
+    done(null, stack);
+  }, function(stack, done) {
+    var grayscale = stack.binaryArray;
+    var width = stack.blur.width;
+
+    function getLineCount(p1, p2, debug) {
+      var lastBit = -1;
+      var r = {
+        count: 0,
+        points: []
+      };
+
+      if(debug) {
+        var d = debugCanvas(stack.blur, {
+          display: false,
+          blank: true,
+          name: "Count"
+        });
+      }
+
+      traverseLine(p1, p2, {
+        step: 1
+      }, function(x, y) {
+        x = Math.round(x);
+        y = Math.round(y);
+
+        let bit = grayscale[y * width + x];
+
+        drawPixel(d, x, y, bit === 0 ? "red" : "blue", 1);
+
+        if(bit !== lastBit) {
+          r.points.push(new Vector(x, y));
+
+          r.count++;
+        }
+
+        lastBit = bit;
+      });
+
+      return r;
+    }
+
+    stack.timingCountA = getLineCount(stack.timingCenterA.p1, stack.timingCenterA.p2, true);
+    stack.timingCountB = getLineCount(stack.timingCenterB.p1, stack.timingCenterB.p2, true);
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      display: false,
+      blank: true,
+      name: "Timing A Count"
+    });
+
+    drawText(d, stack.timingA.p1.x, stack.timingA.p1.y, stack.timingCountA.count, "yellow");
+
+    done(null, stack);
+  }, function(stack, done) {
+    var d = debugCanvas(stack.blur, {
+      display: false,
+      blank: true,
+      name: "Timing B Count"
+    });
+
+    drawText(d, stack.timingB.p1.x, stack.timingB.p1.y, stack.timingCountB.count, "yellow");
+
+    done(null, stack);
+  }, function(stack, done) {
+    stack.timingIntersect = intersection({
+      start: stack.timingCenterA.p1,
+      end: stack.timingCenterA.p2
+    }, {
+      start: stack.timingCenterB.p1,
+      end: stack.timingCenterB.p2
+    });
+
+    done(null, stack);
+  }, function(stack, done) {
+    // XXX: fix candidates[0] usage (AKA, create Queue)
+    var d = debugCanvas(stack.blur, {
+      blank: true,
+      name: "Grid"
+    });
+
+    drawPixel(d, stack.timingIntersect.x, stack.timingIntersect.y, "red", 1);
+
+    var timingCountA = stack.timingCountA;
+    var timingCountB = stack.timingCountB;
+
+    var bitLenA = (stack.timingCenterA.length / timingCountA);
+    var bitLenB = (stack.timingCenterB.length / timingCountB);
+    var angleA = lineAngle(stack.timingCenterA);
+    var angleB = lineAngle(stack.timingCenterB);
+    var finderA = stack.candidates[0].finderA;
+    var finderB = stack.candidates[0].finderB;
+
+    var timingIntersect = stack.timingIntersect;
+
+    var F = 1;
+    var start = {
+      x: timingIntersect.x - Math.cos(angleA) * (bitLenA * F),
+      y: timingIntersect.y - Math.sin(angleB) * (bitLenB * F)
+    };
+
+    var end = {
+      x: timingIntersect.x - Math.cos(angleA) * (bitLenA * (stack.timingCountA - 2)),
+      y: timingIntersect.y - Math.sin(angleB) * (bitLenB * F)
+    };
+
+    var divisor = 4;
+    var len = Math.floor(timingCountA.count * timingCountB.count);
+    var pointsA = timingCountA.points;
+    var pointsB = timingCountB.points;
+
+    var bits = [];
+    var grayscale = stack.binaryArray;
+    var width = stack.blur.width;
+
+    for(var i = 0; i < len - 1; i++) {
+      var mod = i % timingCountA.count;
+      var div = Math.floor(i / timingCountB.count);
+
+      if(mod === 11 || div === 11) {
+        bits.push(1);
+        continue;
+      }
+
+      let pA = pointsA[mod];
+      let pB = pointsB[div];
+      let nA = pointsA[mod + 1];
+      let nB = pointsB[div + 1];
+      var lenA = pA.distance(nA) * 0.5;
+      var lenB = pB.distance(nB) * 0.5;
+      if(mod === 0) {
+        lenA += 2;
+        lenB += 2;
+      }
+
+      let x = Math.round(pA.x - Math.cos(angleA) * (lenA / 2));
+      let y = Math.round(pB.y - Math.sin(angleB) * (lenB / 2));
+
+      let bitIndex = y * width + x;
+      let bit = stack.binaryArray[bitIndex];
+      bits.push(bit === 0 ? 0 : 1);
+
+      drawPixel(d, x, y, bit === 0?"red":"blue", 1);
+    };
+    console.log((bits),bits.length);
+    console.log(JSON.stringify(bits));
+
+    drawPixel(d, start.x, start.y, "green", 1);
+    drawPixel(d, end.x, end.y, "red", 1);
+
+    done(null, stack);
+  }], function(err, stack) {
+    if(err) throw err;
+
+    var time = (new Date()).valueOf() - stack.start;
+    console.log("Done! Took %s seconds", time / 1000);
+  });
 }
 
 
-function main() {
-  image = $('#input')[0];
-  image.onload = run;
-  image.src = 'samples/sample1.jpg';
-  //image.src = 'samples/plate1_cropped.jpg';
-}
+module.exports = run;
 
-$(document).ready(main);
