@@ -22,6 +22,7 @@
   },
   "license": "AGPL-3.0",
   "devDependencies": {
+    "datamatrix-decode": "0.0.1",
     "ecstatic": "^1.4.1",
     "tape": "^4.6.0",
     "watchify": "^3.7.0"
