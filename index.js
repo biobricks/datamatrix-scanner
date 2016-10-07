@@ -610,13 +610,21 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
   var outerTiming;
   var innerTiming;
 
-  if(a < 0) a = -a;
+  if(a < 0) {
+    a = -a;
+  } else {
+    len = -len;
+  }
 
-  traverseLine(timingB.p2, timingB.p1, function(x, y, i) {
+  traverseLine(timingB.p2, timingB.p1, {
+    step: 1
+  }, function(x, y, i) {
     // this needs to be smarter
     // it should determine if A is + or - of B
     var findSideX = x - Math.cos(a) * len;
     var findSideY = y - Math.sin(a) * len;
+
+    drawLine(d, x, y, findSideX, findSideY, 1, "rgba(255,0,0," + (i * len) + ")");
 
     var lineAvg = getLineAverage(binaryArray, {
       x: x,
@@ -828,6 +836,9 @@ function run(image, canvas, opts, cb) {
 
     stack.timingA = new Line(candidate.finderB.remote, stack.farCorner);
     stack.timingB = new Line(candidate.finderA.remote, stack.farCorner);
+    stack.timingA.origin = stack.timingB.origin = stack.farCorner;
+    stack.timingA.remote = candidate.finderB.remote;
+    stack.timingB.remote = candidate.finderA.remote;
 
     done(null, stack);
   }, function(stack, done) {
@@ -860,7 +871,7 @@ function run(image, canvas, opts, cb) {
 
     var d = debugCanvas(stack.canvas, {
       blank: true,
-      //display: false,
+      display: false,
       name: "Binary"
     });
 
@@ -897,7 +908,7 @@ function run(image, canvas, opts, cb) {
     done(null, stack);
   }, function(stack, done) {
     var d = debugCanvas(stack.blur, {
-      display: false,
+      //display: false,
       blank: true,
       name: "Verify Timing A"
     });
@@ -915,7 +926,7 @@ function run(image, canvas, opts, cb) {
     done(null, stack);
   }, function(stack, done) {
     var d = debugCanvas(stack.blur, {
-      display: false,
+      //display: false,
       blank: true,
       name: "Verify Timing B"
     });
