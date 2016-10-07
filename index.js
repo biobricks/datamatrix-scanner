@@ -16,6 +16,7 @@ var downSize = 400;
 
 var Detector = require("./jsdatamatrix/src/dm_detector.js");
 var BitMatrix = require("./jsdatamatrix/src/dm_bitmatrix.js");
+var Line = require("./lib/Line");
 
 var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
@@ -27,33 +28,6 @@ const COLOR_THRESHOLD = 55;
 
 var debugMode = true;
 var canvasDebug = debugMode;
-
-function Line(p1, p2) {
-  this.p1 = p1 instanceof Vector ? p1 : new Vector(p1.x, p1.y);
-  this.p2 = p2 instanceof Vector ? p2 : new Vector(p2.x, p2.y);
-}
-
-Line.prototype = {
-  get length() {
-    return this.p1.distance(this.p2);
-  },
-
-  get x1() {
-    return this.p1.x;
-  },
-
-  get x2() {
-    return this.p2.x;
-  },
-
-  get y1() {
-    return this.p1.y;
-  },
-
-  get y2() {
-    return this.p2.y;
-  }
-}
 
 function cloneCanvas(oldCanvas, opts) {
   opts = (opts || {});
