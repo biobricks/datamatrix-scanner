@@ -23,7 +23,7 @@ var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 const STEP = 1 / 100;
 const MIN_AVG = 100;
 const MAX_AVG = 151;
-const AVG_DEVIATION = 70;
+const AVG_DEVIATION = 30;
 const COLOR_THRESHOLD = 55;
 
 var debugMode = true;
