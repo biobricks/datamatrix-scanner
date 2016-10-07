@@ -22,7 +22,7 @@ var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 
 const STEP = 1 / 100;
 const MIN_AVG = 100;
-const MAX_AVG = 140;
+const MAX_AVG = 151;
 const AVG_DEVIATION = 70;
 const COLOR_THRESHOLD = 55;
 
@@ -1025,6 +1025,7 @@ function run(image, canvas, opts, cb) {
 
     stack.timingCountA = getLineCount(stack.timingCenterA.p1, stack.timingCenterA.p2, true);
     stack.timingCountB = getLineCount(stack.timingCenterB.p1, stack.timingCenterB.p2, true);
+    stack.timingCount = Math.floor((stack.timingCountA.count + stack.timingCountB.count) / 2);
 
     done(null, stack);
   }, function(stack, done) {
@@ -1107,11 +1108,13 @@ function run(image, canvas, opts, cb) {
     var grayscale = stack.binaryArray;
     var width = stack.blur.width;
 
+    var count = start.timingCount;
+
     for(var i = 0; i < len - 1; i++) {
-      var mod = i % timingCountA.count;
-      var div = Math.floor(i / timingCountB.count);
+      var mod = i % count;
+      var div = Math.floor(i / count);
       var idxMod = mod;
-      var idxDiv = timingCountB.count - div - 1;
+      var idxDiv = count - div - 1;
 
       if(!bits[idxMod]) {
         bits[idxMod] = [1];
@@ -1150,7 +1153,7 @@ function run(image, canvas, opts, cb) {
       drawPixel(d, x, y, bit === 0?"red":"blue", 1);
     };
 
-    for(i = 0; i < timingCountA.count; i++)
+    for(i = 0; i < count; i++)
       bits[bits.length - 1][i] = 1;
 
     stack.bits = bits;
