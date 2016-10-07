@@ -860,7 +860,7 @@ function run(image, canvas, opts, cb) {
 
     var d = debugCanvas(stack.canvas, {
       blank: true,
-      display: false,
+      //display: false,
       name: "Binary"
     });
 
@@ -1053,21 +1053,30 @@ function run(image, canvas, opts, cb) {
       name: "Grid"
     });
 
-    drawPixel(d, stack.timingIntersect.x, stack.timingIntersect.y, "red", 1);
+    //drawPixel(d, stack.timingIntersect.x, stack.timingIntersect.y, "yellow", 1);
+
+    drawPixel(d, stack.timingCenterA.p1.x, stack.timingCenterA.p1.y, "red", 1);
+    drawPixel(d, stack.timingCenterA.p2.x, stack.timingCenterA.p2.y, "green", 1);
+
+    drawPixel(d, stack.timingCenterB.p1.x, stack.timingCenterB.p1.y, "red", 1);
+    drawPixel(d, stack.timingCenterB.p2.x, stack.timingCenterB.p2.y, "green", 1);
 
     var timingCountA = stack.timingCountA;
     var timingCountB = stack.timingCountB;
 
-    var bitLenA = (stack.timingCenterA.length / timingCountA);
-    var bitLenB = (stack.timingCenterB.length / timingCountB);
+    var bitLenA = (stack.timingCenterA.length / timingCountA.count);
+    var bitLenB = (stack.timingCenterB.length / timingCountB.count);
     var angleA = lineAngle(stack.timingCenterA);
     var angleB = lineAngle(stack.timingCenterB);
+    var angle = (angleA + angleB) / 2;
     var finderA = stack.candidates[0].finderA;
     var finderB = stack.candidates[0].finderB;
 
+    console.log(angle, angleA, angleB);
+
     var timingIntersect = stack.timingIntersect;
 
-    var F = 1;
+    var F = 1.2;
     var start = {
       x: timingIntersect.x - Math.cos(angleA) * (bitLenA * F),
       y: timingIntersect.y - Math.sin(angleB) * (bitLenB * F)
@@ -1101,12 +1110,20 @@ function run(image, canvas, opts, cb) {
         continue;
       }
 
+      if(mod === 0 || div === 0) {
+        bits[idxMod][idxDiv] = mod === 0 ? div % 2 : mod % 2;
+        continue;
+      }
+
       let pA = pointsA[mod];
       let pB = pointsB[div];
       let nA = pointsA[mod + 1];
       let nB = pointsB[div + 1];
-      var lenA = pA.distance(nA) * 0.5;
-      var lenB = pB.distance(nB) * 0.5;
+      var lenA = pA.distance(nA) * 0.6;
+      var lenB = pB.distance(nB) * 0.6;
+
+      // needs a better way to nudge
+      // start.x/y calculated above is an acurate starting point
       if(mod === 0) {
         lenA += 2;
         lenB += 2;
