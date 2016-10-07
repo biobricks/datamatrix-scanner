@@ -1106,7 +1106,7 @@ function run(image, canvas, opts, cb) {
     var grayscale = stack.binaryArray;
     var width = stack.blur.width;
 
-    var count = start.timingCount;
+    var count = stack.timingCount;
 
     for(var i = 0; i < len - 1; i++) {
       var mod = i % count;
