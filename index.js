@@ -197,7 +197,7 @@ function drawImageTo(img, ctx, downSize) {
 
 }
 
-function detectLines(stack) {
+function detectLines(stack, blur) {
   var canvas = cloneCanvas(stack.ctx.canvas);
   var ctx = canvas.getContext("2d");
 
@@ -717,8 +717,8 @@ function run(image, canvas, opts, cb) {
   }, function(stack, done) {
     // Cycle through blur levels until LSD finds
     // candidate lines
-    for(blur=6; blur <= 12; blur+=2) {
-      var lineDetect = detectLines(stack);
+    for(var blur = 2; blur <= 12; blur += 2) {
+      var lineDetect = detectLines(stack, blur);
 
       debugCanvas(lineDetect.canvas, {
         display: false,
