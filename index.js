@@ -240,19 +240,16 @@ function lineAngle(line) {
   return line.angle;
 }
 
+function find_angle(A,B,C) {
+  var AB = Math.sqrt(Math.pow(B.x-A.x,2)+ Math.pow(B.y-A.y,2));
+  var BC = Math.sqrt(Math.pow(B.x-C.x,2)+ Math.pow(B.y-C.y,2));
+  var AC = Math.sqrt(Math.pow(C.x-A.x,2)+ Math.pow(C.y-A.y,2));
+  return Math.acos((BC*BC+AB*AB-AC*AC)/(2*BC*AB));
+}
 
 // returns the smallest angle between two lines
 function smallestAngleBetween(finderA, finderB) {
-  finderA.angle = lineAngle(finderA);
-  finderB.angle = lineAngle(finderB);
-
-  var diff = Math.abs(finderB.angle - finderA.angle);
-
-  if(diff > Math.PI) {
-    diff = diff - Math.PI;
-  }
-
-  return diff;
+  return find_angle(finderA.origin, finderB.remote, finderA.remote);
 }
 
 
@@ -281,7 +278,7 @@ function findL(lines, opts) {
 
       var relAngle = smallestAngleBetween(finderA, finderB);
 
-      if(relAngle > 1.4 && relAngle < 1.6) {
+      if(Math.abs(relAngle - Math.PI / 4) < 0.01) {
         drawLine(d, finderB.remote, finderA.remote, Math.round(Math.random() * 4), randomColor());
         return true;
       }
