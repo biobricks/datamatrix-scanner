@@ -25,6 +25,7 @@ const MIN_AVG = 100;
 const MAX_AVG = 151;
 const AVG_DEVIATION = 30;
 const COLOR_THRESHOLD = 55;
+const DISCARD_SHORT_LINES = true;
 
 var debugMode = true;
 var canvasDebug = debugMode;
@@ -211,10 +212,28 @@ function detectLines(stack, blur) {
   var lines = lsd.lsd(bm.bits, bm.width, bm.height);
 
   var i, line;
-  for(i=0; i < lines.length; i++) {
-    line = lines[i];
-    line.p1 = new Vector(line.x1, line.y1);
-    line.p2 = new Vector(line.x2, line.y2);
+  var avg = 0;
+
+  lines.sort(function(line, bline) {
+    if(!line.p1)
+      line.p1 = new Vector(line.x1, line.y1);
+
+    if(!line.p2)
+      line.p2 = new Vector(line.x2, line.y2);
+
+    if(!line.length) {
+      line.length = line.p1.distance(line.p2);
+      avg += line.length;
+    }
+
+    return bline.length - line.length;
+  });
+
+  var avgLength = avg / lines.length;
+
+  if(DISCARD_SHORT_LINES) {
+    lines = lines.slice(0, Math.ceil(lines.length / 4));
+
   }
 
   return {lines: lines, bitmatrix: bm, canvas: canvas};
