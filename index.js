@@ -287,15 +287,14 @@ function findL(lines, opts) {
     return false;
   }
 
-  while(lines.length > 0) {
-    var finderA = lines.shift();
-    var lenA = finderA.p1.distance(finderA.p2);
-    finderA.length = lenA;
+  for(var i = 0; i < lines.length; i++) {
+    var finderA = lines[i];
+    var lenA = finderA.length;
 
     // try to discard this earlier
     if(lenA < minLen) continue;
 
-    for(var j = 0; j < lines.length; j++) {
+    for(var j = i; j < lines.length; j++) {
       var finderB = lines[j];
       if(finderA === finderB) continue;
 
