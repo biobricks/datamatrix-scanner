@@ -857,7 +857,6 @@ function run(image, canvas, opts, cb) {
         // at (finderAdeg + finderBdeg) / 2
         // len finderA.remote <> finderB.remote
         // and averaging it with xc/yc
-        var len = (finderB.length + finderA.length) / 2;
         var aA = lineAngle(finderA);
         var aB = lineAngle(finderB);
 
