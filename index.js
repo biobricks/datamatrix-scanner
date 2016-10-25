@@ -715,6 +715,50 @@ function run(image, canvas, opts, cb) {
 
     done(null, stack);
   }, function(stack, done) {
+    // create a binary from the original
+    // scan through the imageData averaging
+    // each pixel like (R+G+B)/3
+    // it is set white if below COLOR_THRESHOLD
+    // TODO: Split function into generation/debugging
+
+    var d = debugCanvas(stack.canvas, {
+      blank: true,
+      display: false,
+      name: "Binary"
+    });
+
+    var binCanvas = cloneCanvas(stack.canvas);
+    var binCtx = binCanvas.getContext("2d");
+    var canvas = stack.canvas;
+    var data = stack.ctx.getImageData(0, 0, canvas.height, canvas.width).data;
+
+    var gi, red, green, blue, alpha;
+
+    stack.bin = [];
+
+    for(var i = 0; i < data.length; i += 4) {
+      gi = i / 4;
+      red = data[i];
+      green = data[i + 1];
+      blue = data[i + 2];
+      alpha = data[i + 3] / 255;
+
+      var bit = ((red + green + blue + alpha) / 4) < COLOR_THRESHOLD ? 255 : 0;
+      var x = gi % canvas.width;
+      var y = Math.floor(gi / canvas.width);
+
+      drawPixel(binCtx, x, y, bit ? "black" : "white");
+      drawPixel(d, x, y, bit ? "black" : "white");
+      stack.bin.push(bit);
+    }
+
+    stack.binary = binCanvas;
+    stack.binaryImageData = binCtx.getImageData(0, 0, binCanvas.width, binCanvas.height);
+    stack.binaryArray = toGrayscale(stack.binaryImageData);
+    stack.binaryArray.canvas = stack.binary;
+
+    done(null, stack);
+  }, function(stack, done) {
     // Cycle through blur levels until LSD finds
     // candidate lines
     for(var blur = 2; blur <= 12; blur += 2) {
@@ -793,50 +837,6 @@ function run(image, canvas, opts, cb) {
           "B", "red"
           );
     }
-
-    done(null, stack);
-  }, function(stack, done) {
-    // create a binary from the original
-    // scan through the imageData averaging
-    // each pixel like (R+G+B)/3
-    // it is set white if below COLOR_THRESHOLD
-    // TODO: Split function into generation/debugging
-
-    var d = debugCanvas(stack.canvas, {
-      blank: true,
-      display: false,
-      name: "Binary"
-    });
-
-    var binCanvas = cloneCanvas(stack.canvas);
-    var binCtx = binCanvas.getContext("2d");
-    var canvas = stack.canvas;
-    var data = stack.ctx.getImageData(0, 0, canvas.height, canvas.width).data;
-
-    var gi, red, green, blue, alpha;
-
-    stack.bin = [];
-
-    for(var i = 0; i < data.length; i += 4) {
-      gi = i / 4;
-      red = data[i];
-      green = data[i + 1];
-      blue = data[i + 2];
-      alpha = data[i + 3] / 255;
-
-      var bit = ((red + green + blue) / 3) < COLOR_THRESHOLD ? 255 : 0;
-      var x = gi % canvas.width;
-      var y = Math.floor(gi / canvas.width);
-
-      drawPixel(binCtx, x, y, bit ? "black" : "white");
-      drawPixel(d, x, y, bit ? "black" : "white");
-      stack.bin.push(bit);
-    }
-
-    stack.binary = binCanvas;
-    stack.binaryImageData = binCtx.getImageData(0, 0, binCanvas.width, binCanvas.height);
-    stack.binaryArray = toGrayscale(stack.binaryImageData);
-    stack.binaryArray.canvas = stack.binary;
 
     done(null, stack);
   }, function(stack, done) {
