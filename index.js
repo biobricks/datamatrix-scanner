@@ -290,8 +290,8 @@ function findL(lines, opts) {
     return false;
   }
 
-  for(var i = 0; i < lines.length; i++) {
-    var finderA = lines[i];
+  while(lines.length > 0) {
+    var finderA = lines.shift();
     var lenA = finderA.p1.distance(finderA.p2);
     finderA.length = lenA;
 
@@ -300,7 +300,6 @@ function findL(lines, opts) {
 
     for(var j = 0; j < lines.length; j++) {
       var finderB = lines[j];
-      if(j === i) continue;
       if(finderA === finderB) continue;
 
       if(
