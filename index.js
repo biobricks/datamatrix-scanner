@@ -830,21 +830,21 @@ function run(image, canvas, opts, cb) {
 
     done(null, stack);
   }, function(stack, done) {
-    // Determine the Far Corner by finder to points.
-    // Each point is at the angle its opposite Finder
-    // along the average length of the Finders.
-    // The points are then averaged to create
-    // the Far Corner.
-    // TODO: Split function into generation and debugging
-    var d = debugCanvas(stack.blur, {
-      blank: true,
-      name: "Far Corner"
-    });
-
     async.forEachSeries(stack.candidates, function(candidate, next) {
       stack.candidate = candidate;
 
       async.waterfall([function(done) {
+        // Determine the Far Corner by finder to points.
+        // Each point is at the angle its opposite Finder
+        // along the average length of the Finders.
+        // The points are then averaged to create
+        // the Far Corner.
+        // TODO: Split function into generation and debugging
+        var d = debugCanvas(stack.blur, {
+          blank: true,
+          name: "Far Corner"
+        });
+
         var finderA = candidate.finderA;
         var finderB = candidate.finderB;
         var remoteA = finderA.remote;
