@@ -286,8 +286,8 @@ function findL(lines, opts) {
     name: "findL"
   });
 
-  var minLen = 200;
-  var maxDist = 5;
+  var minLen = 75;
+  var maxDist = 15;
   var maxLineDiff = 30;
   var r = [];
   
