@@ -650,6 +650,7 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
         y: findSideY
       });
 
+      drawLine(d, outerTiming.p1, outerTiming.p2, 1, "purple");
     } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
       innerTiming = new Line({
         x: x,
@@ -658,6 +659,8 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
         x: findSideX,
         y: findSideY
       });
+
+      drawLine(d, innerTiming.p1, innerTiming.p2, 1, "purple");
 
       return this.break();
     }
@@ -868,9 +871,9 @@ function run(image, canvas, opts, cb) {
         var x = (ax + bx) / 2;
         var y = (ay + by) / 2;
 
-        drawPixel(d, ax, ay, "pink", 1);
-        drawPixel(d, bx, by, "pink", 1);
-        drawPixel(d, x, y, "pink", 1);
+        drawPixel(d, ax, ay, "pink", 3);
+        drawPixel(d, bx, by, "pink", 3);
+        drawPixel(d, x, y, "pink", 3);
 
         stack.farCorner = new Vector(x, y);
 
@@ -923,11 +926,6 @@ function run(image, canvas, opts, cb) {
         });
 
         var timingLines = findTimingLines(stack.binaryArray, stack.timingA, stack.timingB, d);
-        if(timingLines.innerTiming)
-          drawLine(d, timingLines.innerTiming.p1, timingLines.innerTiming.p2, 1, "purple");
-
-        if(timingLines.outerTiming)
-          drawLine(d, timingLines.outerTiming.p1, timingLines.outerTiming.p2, 1, "purple");
 
         stack.innerTimingA = timingLines.innerTiming;
         stack.outerTimingA = timingLines.outerTiming;
@@ -941,11 +939,6 @@ function run(image, canvas, opts, cb) {
         });
 
         var timingLines = findTimingLines(stack.binaryArray, stack.timingB, stack.timingA, d);
-        if(timingLines.innerTiming)
-          drawLine(d, timingLines.innerTiming.p1, timingLines.innerTiming.p2, 1, "purple");
-
-        if(timingLines.outerTiming)
-          drawLine(d, timingLines.outerTiming.p1, timingLines.outerTiming.p2, 1, "purple");
 
         stack.innerTimingB = timingLines.innerTiming;
         stack.outerTimingB = timingLines.outerTiming;
