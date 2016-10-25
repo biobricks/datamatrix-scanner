@@ -1189,7 +1189,7 @@ function run(image, canvas, opts, cb) {
   }], function(err, stack) {
     if(debugMode) {
       var time = (new Date()).valueOf() - stack.start;
-      console.log("Done! Took %s seconds", time / 1000);
+      console.log("%s! Took %s seconds", err ? "Error" : "Success", time / 1000);
     }
 
     cb(err, stack.bits);
