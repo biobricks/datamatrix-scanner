@@ -620,6 +620,8 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
     a = -a;
   }
 
+  var avgTick = 0;
+
   traverseLine(timingB.p2, timingB.p1, {
     step: 1
   }, function(x, y, i) {
@@ -638,9 +640,11 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
       y: findSideY
     }, d);
 
+    var AVG_TICKS = 3;
     var avg = lineAvg.average;
 
     if(!outerTiming && avg > MIN_AVG && avg < MAX_AVG) {
+      if(++avgTick < AVG_TICKS) return;
       outerAvg = avg;
       outerTiming = new Line({
         x: x,
@@ -652,6 +656,7 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
 
       drawLine(d, outerTiming.p1, outerTiming.p2, 1, "purple");
     } else if(outerTiming && Math.abs(outerAvg - avg) > AVG_DEVIATION) {
+      if(++avgTick < AVG_TICKS) return;
       innerTiming = new Line({
         x: x,
         y: y
@@ -663,6 +668,8 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
       drawLine(d, innerTiming.p1, innerTiming.p2, 1, "purple");
 
       return this.break();
+    } else {
+      if(avgTick > 0) avgTick--;
     }
   });
 
