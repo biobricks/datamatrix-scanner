@@ -750,7 +750,7 @@ function run(image, canvas, opts, cb) {
       }
     }
 
-    done(new Error("No Canidates Found"));
+    done(new Error("No Canidates Found"), stack);
   }, function(stack, done) {
     // Cycle through the candidate pairs finding their
     // nearest points and average those together.
