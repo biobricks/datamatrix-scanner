@@ -313,7 +313,7 @@ function findL(lines, opts) {
     // try to discard this earlier
     if(lenA < minLen) continue;
 
-    for(var j = i; j < lines.length; j++) {
+    for(var j = i + 1; j < lines.length; j++) {
       var finderB = lines[j];
       if(finderA === finderB) continue;
 
