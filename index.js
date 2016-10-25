@@ -236,7 +236,13 @@ function detectLines(stack, blur) {
 
   }
 
-  return {lines: lines, bitmatrix: bm, canvas: canvas};
+  window.lines = lines;
+  return {
+    avgLength: avgLength,
+    lines: lines,
+    bitmatrix: bm,
+    canvas: canvas
+  };
 }
 
 function dist(x1, y1, x2, y2) {
