@@ -298,12 +298,11 @@ function findL(lines, opts) {
       //drawLine(d, finderA.p1, finderB.p1, 1, "pink");
       //drawLine(d, finderA.p1, finderB.p2, 2, "pink");
       //drawLine(d, finderB.p1, finderA.p1, 1, "pink");
-      drawLine(d, finderB.p1, finderB.p2, 3, "rgba(255, 0, 0, 0.5)");
-      drawLine(d, finderA.p1, finderA.p2, 3, "rgba(0, 0, 255, 0.5)");
-
       var relAngle = smallestAngleBetween(finderA, finderB);
 
-      if(Math.abs(relAngle - Math.PI / 4) < 0.01) {
+      if(Math.abs(relAngle - Math.PI / 4) < 0.05) {
+        drawLine(d, finderB.p1, finderB.p2, 3, "rgba(255, 0, 0, 0.5)");
+        drawLine(d, finderA.p1, finderA.p2, 3, "rgba(0, 0, 255, 0.5)");
         drawLine(d, finderB.remote, finderA.remote, Math.round(Math.random() * 4), randomColor());
         return true;
       }
