@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "dependencies": {
     "async": "^2.0.1",
-    "canvas": "1.5.0",
+    "canvas-browserify": "^1.1.3",
     "cheerio": "^0.22.0",
     "debug": "^2.2.0",
     "detect-node": "^2.0.3",
@@ -19,12 +19,12 @@
   },
   "scripts": {
     "build": "browserify example.js -d -r './node-canvas-fallback:canvas' > bundle.js ",
-    "watch": "watchify example.js -o bundle.js -dv -r './node-canvas-fallback:canvas'",
+    "watch": "watchify example.js -o bundle.js -dv",
     "test": "tape test/test.js"
   },
   "license": "AGPL-3.0",
   "devDependencies": {
-    "datamatrix-decode": "0.0.1",
+    "datamatrix-decode": "0.0.2",
     "ecstatic": "^1.4.1",
     "tape": "^4.6.0",
     "watchify": "^3.7.0"

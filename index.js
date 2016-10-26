@@ -1,5 +1,4 @@
 var async = require("async");
-var Canvas = require("canvas");
 var debug = require("debug");
 debug.enable("*");
 debug = debug("bbdm");
@@ -10,6 +9,7 @@ var stackblur = require("stackblur-canvas");
 var lsd = require("line-segment-detector");
 var isNode = require("detect-node");
 
+var Canvas = require("canvas-browserify");
 var $ = !isNode ? document.querySelector.bind(document) : require("cheerio").load("<html><body></body></html>");
 
 var downSize = 400;
@@ -68,6 +68,7 @@ function debugCanvas(canvas, opts) {
   d.className = "debug-canvas";
 
   var div = document.createElement("div");
+  console.log("AAAAAAAAA", document.querySelector(".canvas-layers"))
   document.querySelector(".canvas-layers").appendChild(div);
 
   $(".canvas-box").appendChild(d);
@@ -684,12 +685,14 @@ function run(image, canvas, opts, cb) {
     var stack = {
       canvas: canvas,
       ctx: ctx,
-      grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)),
+      grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)), // TODO is this used for anything? it's done before drawToImage is called
       img: image,
       start: (new Date).valueOf()
     }
 
-    drawImageTo(stack.img, stack.ctx, downSize);
+    if(stack.img) {
+      drawImageTo(stack.img, stack.ctx, downSize);
+    }
 
     done(null, stack);
   }, function(stack, done) {
@@ -1162,6 +1165,7 @@ function run(image, canvas, opts, cb) {
     done(null, stack);
   }], function(err, stack) {
     if(debugMode) {
+      if(!stack) return console.log("Failed")
       var time = (new Date()).valueOf() - stack.start;
       console.log("Done! Took %s seconds", time / 1000);
     }
