@@ -3,6 +3,8 @@
   "version": "0.0.1",
   "dependencies": {
     "async": "^2.0.1",
+    "canvas": "1.5.0",
+    "cheerio": "^0.22.0",
     "debug": "^2.2.0",
     "detect-node": "^2.0.3",
     "dom": "0.0.3",
@@ -16,7 +18,7 @@
     "xtend": "^4.0.1"
   },
   "scripts": {
-    "build": "browserify example.js > bundle.js",
+    "build": "browserify example.js -d -r './node-canvas-fallback:canvas' > bundle.js ",
     "watch": "watchify example.js -o bundle.js -dv -r './node-canvas-fallback:canvas'",
     "test": "tape test/test.js"
   },
