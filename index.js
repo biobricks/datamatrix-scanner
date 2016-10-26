@@ -68,7 +68,6 @@ function debugCanvas(canvas, opts) {
   d.className = "debug-canvas";
 
   var div = document.createElement("div");
-  console.log("AAAAAAAAA", document.querySelector(".canvas-layers"))
   document.querySelector(".canvas-layers").appendChild(div);
 
   $(".canvas-box").appendChild(d);
@@ -731,7 +730,7 @@ function run(image, canvas, opts, cb) {
       }
     }
 
-    done(new Error("No Canidates Found"));
+    done(new Error("No Candidates Found"));
   }, function(stack, done) {
     // Cycle through the candidate pairs finding their
     // nearest points and average those together.
@@ -1164,13 +1163,19 @@ function run(image, canvas, opts, cb) {
 
     done(null, stack);
   }], function(err, stack) {
+    if(!err && !stack) {
+      err = new Error("No DataMatrix code found")
+    }
     if(debugMode) {
-      if(!stack) return console.log("Failed")
-      var time = (new Date()).valueOf() - stack.start;
-      console.log("Done! Took %s seconds", time / 1000);
+      if(stack) {
+        var time = (new Date()).valueOf() - stack.start;
+        console.log("Done! Took %s seconds", time / 1000);
+      } else {
+        console.log("Done! No code DataMatrix found");
+      }
     }
 
-    cb(err, stack.bits);
+    cb(err, stack ? stack.bits : null);
   });
 }
 
