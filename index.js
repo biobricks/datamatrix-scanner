@@ -258,9 +258,13 @@ function lineLength(line) {
 }
 
 function lineAngle(line) {
-  line.dx = line.x2 - line.x1;
-  line.dy = line.y2 - line.y1;
-  line.angle = Math.atan(line.dy / line.dx);
+  var origin = line.origin || line.p1;
+  var remote = line.remote || line.p2;
+
+  var dx = remote.x - origin.x;
+  var dy = remote.y - origin.y;
+
+  line.angle = Math.atan2(dy, dx);
 
   return line.angle;
 }
