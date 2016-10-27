@@ -888,20 +888,19 @@ function run(image, canvas, opts, cb) {
         var aA = lineAngle(finderA);
         var aB = lineAngle(finderB);
 
-        var ax = Math.cos(aA) * finderB.length + remoteB.x;
-        var ay = Math.sin(aA) * finderB.length + remoteB.y;
-        var bx = Math.cos(aB) * finderA.length + remoteA.x;
-        var by = Math.sin(aB) * finderA.length + remoteA.y;
+        var ax = Math.cos(aA) * finderA.length + remoteB.x;
+        var ay = Math.sin(aA) * finderA.length + remoteB.y;
 
-        var x = (ax + bx) / 2;
-        var y = (ay + by) / 2;
+        var bx = Math.cos(aB) * finderB.length + remoteA.x;
+        var by = Math.sin(aB) * finderB.length + remoteA.y;
 
-        drawPixel(d, ax, ay, "pink", 3);
-        drawPixel(d, bx, by, "pink", 3);
-        drawPixel(d, x, y, "pink", 3);
+        var x = ax;
+        var y = by;
 
         stack.farCorner = new Vector(x, y);
 
+        // create a new stack for the processing of
+        // individual candidates
         done(null, {
           binaryArray: stack.binaryArray,
           blur: stack.blur,
