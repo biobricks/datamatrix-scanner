@@ -23,6 +23,7 @@ var DEFAULT_COLOR = "rgba(0, 255, 0, 0.3)";
 const STEP = 1 / 100;
 const MIN_AVG = 100;
 const MAX_AVG = 151;
+const MAX_BLUR = 12;
 const AVG_DEVIATION = 30;
 const COLOR_THRESHOLD = 55;
 const DISCARD_SHORT_LINES = true;
@@ -778,7 +779,7 @@ function run(image, canvas, opts, cb) {
   }, function(stack, done) {
     // Cycle through blur levels until LSD finds
     // candidate lines
-    for(var blur = 2; blur <= 12; blur += 2) {
+    for(var blur = 2; blur <= MAX_BLUR; blur++) {
       var lineDetect = detectLines(stack, blur);
 
       debugCanvas(lineDetect.canvas, {
