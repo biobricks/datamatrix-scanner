@@ -1016,12 +1016,25 @@ function run(image, canvas, opts, cb) {
           var lastBit = -1;
           var r = {
             count: 0,
-            points: []
+            points: [],
+            onCenterPoints: [],
+            offCenterPoints: []
           };
+
+          var onCount = 0;
+          var offCount = 0;
+
+          var avgOnLength = 0;
+          var avgOffLength = 0;
+
+          var onLength = 0;
+          var offLength = 0;
+
+          var segmentStart;
 
           if(debug) {
             var d = debugCanvas(stack.blur, {
-              display: false,
+              //display: false,
               blank: true,
               name: "Count"
             });
@@ -1033,12 +1046,46 @@ function run(image, canvas, opts, cb) {
             x = Math.round(x);
             y = Math.round(y);
 
-            let bit = grayscale[y * width + x];
+            var bit = grayscale[y * width + x];
 
-            drawPixel(d, x, y, bit === 0 ? "red" : "blue", 1);
+            var point = new Vector(x, y);
+
+            if(!segmentStart)
+              segmentStart = point;
 
             if(bit !== lastBit) {
-              r.points.push(new Vector(x, y));
+              var length = segmentStart.distance(point);
+
+              if(bit === 0) {
+                offCount++;
+                offLength += length;
+                avgOffLength = offLength / offCount;
+
+                var i = r.offCenterPoints.push(
+                  new Vector(
+                    (segmentStart.x + point.x) / 2,
+                    (segmentStart.y + point.y) / 2
+                  )
+                );
+
+                drawPixel(d, r.offCenterPoints[i - 1].x, r.offCenterPoints[i - 1].y, "red", 3);
+              } else {
+                onCount++;
+                onLength += length;
+                avgOnLength = onLength / onCount;
+
+                var i = r.onCenterPoints.push(
+                  new Vector(
+                    (segmentStart.x + point.x) / 2,
+                    (segmentStart.y + point.y) / 2
+                  )
+                );
+
+                drawPixel(d, r.onCenterPoints[i - 1].x, r.onCenterPoints[i - 1].y, "red", 3);
+              }
+
+              segmentStart = undefined;
+              r.points.push(point);
 
               r.count++;
             }
@@ -1056,7 +1103,7 @@ function run(image, canvas, opts, cb) {
         done(null, stack);
       }, function(stack, done) {
         var d = debugCanvas(stack.blur, {
-          display: false,
+          //display: false,
           blank: true,
           name: "Timing A Count"
         });
@@ -1066,7 +1113,7 @@ function run(image, canvas, opts, cb) {
         done(null, stack);
       }, function(stack, done) {
         var d = debugCanvas(stack.blur, {
-          display: false,
+          //display: false,
           blank: true,
           name: "Timing B Count"
         });
@@ -1087,6 +1134,7 @@ function run(image, canvas, opts, cb) {
       }, function(stack, done) {
         var d = debugCanvas(stack.blur, {
           blank: true,
+          //display: false,
           name: "Grid"
         });
 
