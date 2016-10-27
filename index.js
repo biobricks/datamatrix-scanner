@@ -1,3 +1,5 @@
+/*eslint-env es6*/
+
 var async = require("async");
 var debug = require("debug");
 debug.enable("*");
@@ -734,7 +736,7 @@ function run(image, canvas, opts, cb) {
       drawImageTo(stack.img, stack.ctx, downSize);
     }
 
-    done(null, stack);
+    return done(null, stack);
   }, function(stack, done) {
     // create a binary from the original
     // scan through the imageData averaging
@@ -778,11 +780,12 @@ function run(image, canvas, opts, cb) {
     stack.binaryArray = toGrayscale(stack.binaryImageData);
     stack.binaryArray.canvas = stack.binary;
 
-    done(null, stack);
+    return done(null, stack);
   }, function(stack, done) {
     // Cycle through blur levels until LSD finds
     // candidate lines
-    for(var blur = 2; blur <= MAX_BLUR; blur++) {
+    for(var blur = 2; !breaked && blur <= MAX_BLUR; blur++) {
+      var breaked = false;
       var lineDetect = detectLines(stack, blur);
 
       debugCanvas(lineDetect.canvas, {
@@ -811,392 +814,405 @@ function run(image, canvas, opts, cb) {
 
         stack.candidates = candidates;
 
-        return done(null, stack);
+        // Cycle through the candidate pairs finding their
+        // nearest points and average those together.
+        // TODO: Split function into generation and debugging
+        // *OLD NOTE*
+        // by this point candidates should be pairs,
+        // this will fix some issues around double
+        // processing. This will also help ensure
+        // finderA is across from timingA, B/B, etc.
+        var d = debugCanvas(stack.blur, {
+          blank: true,
+          name: "Candidates " + stack.candidates.length
+        });
+
+        // From here each set of candidates should be tested
+        // this can be accomplished by taking the rest of
+        // the waterfall and moving it into an async.Queue
+        // XXX: Use Queue to process each candidate.
+        for(var i = 0; i < stack.candidates.length; i++) {
+          var finderA = stack.candidates[i].finderA;
+          var finderB = stack.candidates[i].finderB;
+
+          if(finderA === finderB) continue;
+
+          var averageOrigin = averagePoints(finderA.origin, finderB.origin);
+          finderA.origin = finderB.origin = averageOrigin;
+
+          drawLine(d, finderA.origin, finderA.remote, 1, "red");
+          drawLine(d, finderB.origin, finderB.remote, 1, "red");
+
+          drawText(d,
+              (finderA.p1.x + finderA.p2.x) / 2,
+              (finderA.p1.y + finderA.p2.y) / 2,
+              "A", "red"
+              );
+
+          drawText(d,
+              (finderB.p1.x + finderB.p2.x) / 2,
+              (finderB.p1.y + finderB.p2.y) / 2,
+              "B", "red"
+              );
+        }
+
+        async.forEachSeries(stack.candidates, function(candidate, next) {
+          stack.candidate = candidate;
+
+          async.waterfall([function(done) {
+            // Determine the Far Corner by finder to points.
+            // Each point is at the angle its opposite Finder
+            // along the average length of the Finders.
+            // The points are then averaged to create
+            // the Far Corner.
+            // TODO: Split function into generation and debugging
+            var d = debugCanvas(stack.blur, {
+              blank: true,
+              name: "Far Corner"
+            });
+
+            var finderA = candidate.finderA;
+            var finderB = candidate.finderB;
+            var remoteA = finderA.remote;
+            var remoteB = finderB.remote;
+
+            // this can be improved by finding the point
+            // at (finderAdeg + finderBdeg) / 2
+            // len finderA.remote <> finderB.remote
+            // and averaging it with xc/yc
+            var aA = lineAngle(finderA);
+            var aB = lineAngle(finderB);
+
+            var ax = Math.cos(aA) * finderA.length + remoteB.x;
+            var ay = Math.sin(aA) * finderA.length + remoteB.y;
+
+            var bx = Math.cos(aB) * finderB.length + remoteA.x;
+            var by = Math.sin(aB) * finderB.length + remoteA.y;
+
+            var x = ax;
+            var y = by;
+
+            drawPixel(d, ax, ay, "red", 3);
+            drawPixel(d, bx, by, "blue", 3);
+
+            stack.farCorner = new Vector(x, y);
+
+            // create a new stack for the processing of
+            // individual candidates
+            return done(null, {
+              binaryArray: stack.binaryArray,
+              blur: stack.blur,
+              candidate: candidate,
+              farCorner: stack.farCorner,
+              finderA: finderA,
+              finderB: finderB,
+            });
+          }, function(stack, done) {
+            // Create Timing Lines based on the
+            // remote Finder Line and the Far Corner
+            var candidate = stack.candidate;
+
+            stack.timingA = new Line(candidate.finderB.remote, stack.farCorner);
+            stack.timingB = new Line(candidate.finderA.remote, stack.farCorner);
+            stack.timingA.origin = stack.timingB.origin = stack.farCorner;
+            stack.timingA.remote = candidate.finderB.remote;
+            stack.timingB.remote = candidate.finderA.remote;
+
+            return done(null, stack);
+          }, function(stack, done) {
+            var d = debugCanvas(stack.blur, {
+              blank: true,
+              name: "Timing Lines"
+            });
+
+            drawLine(d, stack.timingA.p1, stack.timingA.p2, 1, "orange");
+            drawLine(d, stack.timingB.p1, stack.timingB.p2, 1, "orange");
+            drawText(d,
+                (stack.timingA.p1.x + stack.timingA.p2.x) / 2,
+                (stack.timingA.p1.y + stack.timingA.p2.y) / 2,
+                "A", "orange"
+                );
+
+            drawText(d,
+                (stack.timingB.p1.x + stack.timingB.p2.x) / 2,
+                (stack.timingB.p1.y + stack.timingB.p2.y) / 2,
+                "B", "orange"
+                );
+
+            return done(null, stack);
+          }, function(stack, done) {
+            var d = debugCanvas(stack.blur, {
+              display: false,
+              blank: true,
+              name: "Verify Timing A"
+            });
+
+            var timingLines = findTimingLines(stack.binaryArray, stack.timingA, stack.timingB, d);
+
+            stack.innerTimingA = timingLines.innerTiming;
+            stack.outerTimingA = timingLines.outerTiming;
+
+            return done(timingLines instanceof Error ? timingLines : null, stack);
+          }, function(stack, done) {
+            var d = debugCanvas(stack.blur, {
+              display: false,
+              blank: true,
+              name: "Verify Timing B"
+            });
+
+            var timingLines = findTimingLines(stack.binaryArray, stack.timingB, stack.timingA, d);
+
+            stack.innerTimingB = timingLines.innerTiming;
+            stack.outerTimingB = timingLines.outerTiming;
+
+            return done(timingLines instanceof Error ? timingLines : null, stack);
+          }, function(stack, done) {
+            // Find the center of each timing line
+            // by averaging the x/y of each endpoint
+            stack.timingCenterA = new Line({
+              x: (stack.innerTimingA.p1.x + stack.outerTimingA.p1.x) / 2,
+              y: (stack.innerTimingA.p1.y + stack.outerTimingA.p1.y) / 2
+            }, {
+              x: (stack.innerTimingA.p2.x + stack.outerTimingA.p2.x) / 2,
+              y: (stack.innerTimingA.p2.y + stack.outerTimingA.p2.y) / 2
+            });
+
+            stack.timingCenterB = new Line({
+              x: (stack.innerTimingB.p1.x + stack.outerTimingB.p1.x) / 2,
+              y: (stack.innerTimingB.p1.y + stack.outerTimingB.p1.y) / 2
+            }, {
+              x: (stack.innerTimingB.p2.x + stack.outerTimingB.p2.x) / 2,
+              y: (stack.innerTimingB.p2.y + stack.outerTimingB.p2.y) / 2
+            });
+
+            return done(null, stack);
+          }, function(stack, done) {
+            var d = debugCanvas(stack.blur, {
+              display: false,
+              blank: true,
+              name: "Timing B Center"
+            });
+
+            drawLine(d, stack.timingCenterB.p1, stack.timingCenterB.p2, 1, "yellow");
+
+            return done(null, stack);
+          }, function(stack, done) {
+            var d = debugCanvas(stack.blur, {
+              display: false,
+              blank: true,
+              name: "Timing A Center"
+            });
+
+            drawLine(d, stack.timingCenterA.p1, stack.timingCenterA.p2, 1, "yellow");
+
+            return done(null, stack);
+          }, function(stack, done) {
+            var grayscale = stack.binaryArray;
+            var width = stack.blur.width;
+
+            function getLineCount(p1, p2, debug) {
+              var lastBit = -1;
+              var r = {
+                count: 0,
+                points: [],
+                onCenterPoints: [],
+                offCenterPoints: []
+              };
+
+              var onCount = 0;
+              var offCount = 0;
+
+              var avgOnLength = 0;
+              var avgOffLength = 0;
+
+              var onLength = 0;
+              var offLength = 0;
+
+              var segmentStart;
+
+              if(debug) {
+                var d = debugCanvas(stack.blur, {
+                  //display: false,
+                  blank: true,
+                  name: "Count"
+                });
+              }
+
+              traverseLine(p1, p2, {
+                step: 1
+              }, function(x, y) {
+                x = Math.round(x);
+                y = Math.round(y);
+
+                var bit = grayscale[y * width + x];
+
+                var point = new Vector(x, y);
+
+                if(!segmentStart) {
+                  segmentStart = point;
+                } else if(bit !== lastBit) {
+                  var length = segmentStart.distance(point);
+                  var point = new Vector(
+                      (segmentStart.x + point.x) / 2,
+                      (segmentStart.y + point.y) / 2
+                      );
+                  r.points.push(point);
+
+                  if(bit !== 0) {
+                    if(avgOffLength > 0 && (length + avgOffLength) / 2 < (avgOffLength * AVG_LEN_DEVIATION)) {
+                      console.log("discarding Off Bit %d", r.offCenterPoints.length);
+                      return;
+                    }
+
+                    r.count++;
+                    offCount++;
+                    offLength += length;
+                    avgOffLength = offLength / offCount;
+
+                    var i = r.offCenterPoints.push(point);
+
+                    drawPixel(d, r.offCenterPoints[i - 1].x, r.offCenterPoints[i - 1].y, "red", 3);
+                  } else {
+                    if(avgOnLength > 0 && (length + avgOnLength) / 2 < (avgOnLength * AVG_LEN_DEVIATION)) {
+                      console.log("discarding On Bit %d", r.offCenterPoints.length);
+                      return;
+                    }
+
+                    r.count++;
+                    onCount++;
+                    onLength += length;
+                    avgOnLength = onLength / onCount;
+
+                    var i = r.onCenterPoints.push(point);
+
+                    drawPixel(d, r.onCenterPoints[i - 1].x, r.onCenterPoints[i - 1].y, "red", 3);
+                  }
+
+                  segmentStart = undefined;
+                }
+
+                lastBit = bit;
+              });
+
+              if(segmentStart) {
+                var point = p2;
+                var length = segmentStart.distance(point);
+
+                console.log("Unclosed Bit", lastBit);
+                if(lastBit !== 0) {
+                  r.count++;
+                  offCount++;
+                  offLength += length;
+                  avgOffLength = offLength / offCount;
+
+                  var i = r.offCenterPoints.push(
+                      new Vector(
+                        (segmentStart.x + point.x) / 2,
+                        (segmentStart.y + point.y) / 2
+                        )
+                      );
+
+                  drawPixel(d, r.offCenterPoints[i - 1].x, r.offCenterPoints[i - 1].y, "red", 3);
+                } else {
+                  var i = r.onCenterPoints.push(
+                      new Vector(
+                        (segmentStart.x + point.x) / 2,
+                        (segmentStart.y + point.y) / 2
+                        )
+                      );
+
+                  r.count++;
+                  onCount++;
+                  onLength += length;
+                  avgOnLength = onLength / onCount;
+
+                  drawPixel(d, r.onCenterPoints[i - 1].x, r.onCenterPoints[i - 1].y, "red", 3);
+                }
+              }
+
+              return r;
+            }
+
+            stack.timingPointsA = getLineCount(stack.timingCenterA.p1, stack.timingCenterA.p2, true).points;
+            stack.timingPointsB = getLineCount(stack.timingCenterB.p1, stack.timingCenterB.p2, true).points;
+
+            if(stack.timingPointsA.length < 10 || stack.timingPointsB.length < 10) return done(new Error("Insufficient Timing Points", stack));
+
+            return done(null, stack);
+          }, function(stack, done) {
+            var d = debugCanvas(stack.blur, {
+              //display: false,
+              blank: true,
+              name: "Timing A Count"
+            });
+
+            drawText(d, stack.timingA.p1.x, stack.timingA.p1.y, stack.timingPointsA.length, "yellow");
+
+            return done(null, stack);
+          }, function(stack, done) {
+            var d = debugCanvas(stack.blur, {
+              //display: false,
+              blank: true,
+              name: "Timing B Count"
+            });
+
+            drawText(d, stack.timingB.p1.x, stack.timingB.p1.y, stack.timingPointsB.length, "yellow");
+
+            return done(null, stack);
+          }, function(stack, done) {
+            var d = debugCanvas(stack.blur, {
+              blank: true,
+              //display: false,
+              name: "Grid"
+            });
+
+            var grayscale = stack.binaryArray;
+            var width = grayscale.canvas.width;
+
+            var data = [];
+
+            // bit output starts here
+            // typically if a or b === 11 you can just put 1 in the bit
+            // field and carry on
+            for(var i = 0; i < 120; i++ ) {
+              var a = 1 + i % (stack.timingPointsA.length - 1);
+              var b = 1 + Math.floor(i / (stack.timingPointsB.length));
+
+              var bitIdx = 12 - a;
+              if(!data[bitIdx]) data[bitIdx] = new Array(stack.timingPointsB.length);
+
+              if(b === 11) data[bitIdx][b] = 1;
+
+              var pointA = stack.timingPointsA[a];
+              var pointB = stack.timingPointsB[b];
+
+              var x = Math.round(pointA.x);
+              var y = Math.round(pointB.y);
+
+              var bit = grayscale[y * width + x];
+              data[bitIdx][b] = bit ? 1 : 0;
+
+              drawPixel(d, x, y, bit ? "red" : "green", 3);
+            }
+
+            stack.bits= data;
+
+            return done(null, stack);
+          }], function(err, stack) {
+            if(err) {
+              console.log(err);
+              return next();
+            }
+
+            breaked = true;
+
+            return done(null, stack);
+          });
+        });
       }
     }
 
     done(new Error("No Canidates Found"), stack);
-  }, function(stack, done) {
-    // Cycle through the candidate pairs finding their
-    // nearest points and average those together.
-    // TODO: Split function into generation and debugging
-    // *OLD NOTE*
-    // by this point candidates should be pairs,
-    // this will fix some issues around double
-    // processing. This will also help ensure
-    // finderA is across from timingA, B/B, etc.
-    var d = debugCanvas(stack.blur, {
-      blank: true,
-      name: "Candidates " + stack.candidates.length
-    });
-
-    // From here each set of candidates should be tested
-    // this can be accomplished by taking the rest of
-    // the waterfall and moving it into an async.Queue
-    // XXX: Use Queue to process each candidate.
-    for(var i = 0; i < stack.candidates.length; i++) {
-      var finderA = stack.candidates[i].finderA;
-      var finderB = stack.candidates[i].finderB;
-
-      if(finderA === finderB) continue;
-
-      var averageOrigin = averagePoints(finderA.origin, finderB.origin);
-      finderA.origin = finderB.origin = averageOrigin;
-
-      drawLine(d, finderA.origin, finderA.remote, 1, "red");
-      drawLine(d, finderB.origin, finderB.remote, 1, "red");
-
-      drawText(d,
-          (finderA.p1.x + finderA.p2.x) / 2,
-          (finderA.p1.y + finderA.p2.y) / 2,
-          "A", "red"
-          );
-
-      drawText(d,
-          (finderB.p1.x + finderB.p2.x) / 2,
-          (finderB.p1.y + finderB.p2.y) / 2,
-          "B", "red"
-          );
-    }
-
-    done(null, stack);
-  }, function(stack, done) {
-    async.forEachSeries(stack.candidates, function(candidate, next) {
-      stack.candidate = candidate;
-
-      async.waterfall([function(done) {
-        // Determine the Far Corner by finder to points.
-        // Each point is at the angle its opposite Finder
-        // along the average length of the Finders.
-        // The points are then averaged to create
-        // the Far Corner.
-        // TODO: Split function into generation and debugging
-        var d = debugCanvas(stack.blur, {
-          blank: true,
-          name: "Far Corner"
-        });
-
-        var finderA = candidate.finderA;
-        var finderB = candidate.finderB;
-        var remoteA = finderA.remote;
-        var remoteB = finderB.remote;
-
-        // this can be improved by finding the point
-        // at (finderAdeg + finderBdeg) / 2
-        // len finderA.remote <> finderB.remote
-        // and averaging it with xc/yc
-        var aA = lineAngle(finderA);
-        var aB = lineAngle(finderB);
-
-        var ax = Math.cos(aA) * finderA.length + remoteB.x;
-        var ay = Math.sin(aA) * finderA.length + remoteB.y;
-
-        var bx = Math.cos(aB) * finderB.length + remoteA.x;
-        var by = Math.sin(aB) * finderB.length + remoteA.y;
-
-        var x = ax;
-        var y = by;
-
-        drawPixel(d, ax, ay, "red", 3);
-        drawPixel(d, bx, by, "blue", 3);
-
-        stack.farCorner = new Vector(x, y);
-
-        // create a new stack for the processing of
-        // individual candidates
-        done(null, {
-          binaryArray: stack.binaryArray,
-          blur: stack.blur,
-          candidate: candidate,
-          farCorner: stack.farCorner,
-          finderA: finderA,
-          finderB: finderB,
-        });
-      }, function(stack, done) {
-        // Create Timing Lines based on the
-        // remote Finder Line and the Far Corner
-        var candidate = stack.candidate;
-
-        stack.timingA = new Line(candidate.finderB.remote, stack.farCorner);
-        stack.timingB = new Line(candidate.finderA.remote, stack.farCorner);
-        stack.timingA.origin = stack.timingB.origin = stack.farCorner;
-        stack.timingA.remote = candidate.finderB.remote;
-        stack.timingB.remote = candidate.finderA.remote;
-
-        done(null, stack);
-      }, function(stack, done) {
-        var d = debugCanvas(stack.blur, {
-          blank: true,
-          name: "Timing Lines"
-        });
-
-        drawLine(d, stack.timingA.p1, stack.timingA.p2, 1, "orange");
-        drawLine(d, stack.timingB.p1, stack.timingB.p2, 1, "orange");
-        drawText(d,
-            (stack.timingA.p1.x + stack.timingA.p2.x) / 2,
-            (stack.timingA.p1.y + stack.timingA.p2.y) / 2,
-            "A", "orange"
-        );
-
-        drawText(d,
-            (stack.timingB.p1.x + stack.timingB.p2.x) / 2,
-            (stack.timingB.p1.y + stack.timingB.p2.y) / 2,
-            "B", "orange"
-        );
-
-        done(null, stack);
-      }, function(stack, done) {
-        var d = debugCanvas(stack.blur, {
-          display: false,
-          blank: true,
-          name: "Verify Timing A"
-        });
-
-        var timingLines = findTimingLines(stack.binaryArray, stack.timingA, stack.timingB, d);
-
-        stack.innerTimingA = timingLines.innerTiming;
-        stack.outerTimingA = timingLines.outerTiming;
-
-        done(timingLines instanceof Error ? timingLines : null, stack);
-      }, function(stack, done) {
-        var d = debugCanvas(stack.blur, {
-          display: false,
-          blank: true,
-          name: "Verify Timing B"
-        });
-
-        var timingLines = findTimingLines(stack.binaryArray, stack.timingB, stack.timingA, d);
-
-        stack.innerTimingB = timingLines.innerTiming;
-        stack.outerTimingB = timingLines.outerTiming;
-
-        done(timingLines instanceof Error ? timingLines : null, stack);
-      }, function(stack, done) {
-        // Find the center of each timing line
-        // by averaging the x/y of each endpoint
-        stack.timingCenterA = new Line({
-          x: (stack.innerTimingA.p1.x + stack.outerTimingA.p1.x) / 2,
-          y: (stack.innerTimingA.p1.y + stack.outerTimingA.p1.y) / 2
-        }, {
-          x: (stack.innerTimingA.p2.x + stack.outerTimingA.p2.x) / 2,
-          y: (stack.innerTimingA.p2.y + stack.outerTimingA.p2.y) / 2
-        });
-
-        stack.timingCenterB = new Line({
-          x: (stack.innerTimingB.p1.x + stack.outerTimingB.p1.x) / 2,
-          y: (stack.innerTimingB.p1.y + stack.outerTimingB.p1.y) / 2
-        }, {
-          x: (stack.innerTimingB.p2.x + stack.outerTimingB.p2.x) / 2,
-          y: (stack.innerTimingB.p2.y + stack.outerTimingB.p2.y) / 2
-        });
-
-        done(null, stack);
-      }, function(stack, done) {
-        var d = debugCanvas(stack.blur, {
-          display: false,
-          blank: true,
-          name: "Timing B Center"
-        });
-
-        drawLine(d, stack.timingCenterB.p1, stack.timingCenterB.p2, 1, "yellow");
-
-        done(null, stack);
-      }, function(stack, done) {
-        var d = debugCanvas(stack.blur, {
-          display: false,
-          blank: true,
-          name: "Timing A Center"
-        });
-
-        drawLine(d, stack.timingCenterA.p1, stack.timingCenterA.p2, 1, "yellow");
-
-        done(null, stack);
-      }, function(stack, done) {
-        var grayscale = stack.binaryArray;
-        var width = stack.blur.width;
-
-        function getLineCount(p1, p2, debug) {
-          var lastBit = -1;
-          var r = {
-            count: 0,
-            points: [],
-            onCenterPoints: [],
-            offCenterPoints: []
-          };
-
-          var onCount = 0;
-          var offCount = 0;
-
-          var avgOnLength = 0;
-          var avgOffLength = 0;
-
-          var onLength = 0;
-          var offLength = 0;
-
-          var segmentStart;
-
-          if(debug) {
-            var d = debugCanvas(stack.blur, {
-              //display: false,
-              blank: true,
-              name: "Count"
-            });
-          }
-
-          traverseLine(p1, p2, {
-            step: 1
-          }, function(x, y) {
-            x = Math.round(x);
-            y = Math.round(y);
-
-            var bit = grayscale[y * width + x];
-
-            var point = new Vector(x, y);
-
-            if(!segmentStart) {
-              segmentStart = point;
-            } else if(bit !== lastBit) {
-              var length = segmentStart.distance(point);
-              var point = new Vector(
-                (segmentStart.x + point.x) / 2,
-                (segmentStart.y + point.y) / 2
-              );
-              r.points.push(point);
-
-              if(bit !== 0) {
-                if(avgOffLength > 0 && (length + avgOffLength) / 2 < (avgOffLength * AVG_LEN_DEVIATION)) {
-                  console.log("discarding Off Bit %d", r.offCenterPoints.length);
-                  return;
-                }
-
-                r.count++;
-                offCount++;
-                offLength += length;
-                avgOffLength = offLength / offCount;
-
-                var i = r.offCenterPoints.push(point);
-
-                drawPixel(d, r.offCenterPoints[i - 1].x, r.offCenterPoints[i - 1].y, "red", 3);
-              } else {
-                if(avgOnLength > 0 && (length + avgOnLength) / 2 < (avgOnLength * AVG_LEN_DEVIATION)) {
-                  console.log("discarding On Bit %d", r.offCenterPoints.length);
-                  return;
-                }
-
-                r.count++;
-                onCount++;
-                onLength += length;
-                avgOnLength = onLength / onCount;
-
-                var i = r.onCenterPoints.push(point);
-
-                drawPixel(d, r.onCenterPoints[i - 1].x, r.onCenterPoints[i - 1].y, "red", 3);
-              }
-
-              segmentStart = undefined;
-            }
-
-            lastBit = bit;
-          });
-
-          if(segmentStart) {
-            var point = p2;
-            var length = segmentStart.distance(point);
-
-            console.log("Unclosed Bit", lastBit);
-            if(lastBit !== 0) {
-              r.count++;
-              offCount++;
-              offLength += length;
-              avgOffLength = offLength / offCount;
-
-              var i = r.offCenterPoints.push(
-                new Vector(
-                  (segmentStart.x + point.x) / 2,
-                  (segmentStart.y + point.y) / 2
-                  )
-              );
-
-              drawPixel(d, r.offCenterPoints[i - 1].x, r.offCenterPoints[i - 1].y, "red", 3);
-            } else {
-              var i = r.onCenterPoints.push(
-                new Vector(
-                  (segmentStart.x + point.x) / 2,
-                  (segmentStart.y + point.y) / 2
-                )
-              );
-
-              r.count++;
-              onCount++;
-              onLength += length;
-              avgOnLength = onLength / onCount;
-
-              drawPixel(d, r.onCenterPoints[i - 1].x, r.onCenterPoints[i - 1].y, "red", 3);
-            }
-          }
-
-          return r;
-        }
-
-        stack.timingPointsA = getLineCount(stack.timingCenterA.p1, stack.timingCenterA.p2, true).points;
-        stack.timingPointsB = getLineCount(stack.timingCenterB.p1, stack.timingCenterB.p2, true).points;
-
-        done(null, stack);
-      }, function(stack, done) {
-        var d = debugCanvas(stack.blur, {
-          //display: false,
-          blank: true,
-          name: "Timing A Count"
-        });
-
-        drawText(d, stack.timingA.p1.x, stack.timingA.p1.y, stack.timingPointsA.length, "yellow");
-
-        done(null, stack);
-      }, function(stack, done) {
-        var d = debugCanvas(stack.blur, {
-          //display: false,
-          blank: true,
-          name: "Timing B Count"
-        });
-
-        drawText(d, stack.timingB.p1.x, stack.timingB.p1.y, stack.timingPointsB.length, "yellow");
-
-        done(null, stack);
-      }, function(stack, done) {
-        var d = debugCanvas(stack.blur, {
-          blank: true,
-          //display: false,
-          name: "Grid"
-        });
-
-        var d = debugCanvas(stack.blur, {
-          blank: true,
-          //display: false,
-          name: "Grid"
-        });
-
-        for(var i = 0; i < 120; i++ ) {
-          var a = 1 + i % (stack.timingPointsA.length - 1);
-          var b = 1 + Math.floor(i / (stack.timingPointsB.length));
-
-          var pointA = stack.timingPointsA[a];
-          var pointB = stack.timingPointsB[b];
-
-          drawPixel(d, pointA.x, pointB.y, "purple", 3);
-        }
-
-        done(null, stack);
-      }], function(err, stack) {
-        if(err) {
-          console.log(err);
-          return next();
-        }
-
-        done(err, stack);
-      });
-    }, function(err) {
-      done(new Error("nothing found"), stack);
-    });
   }], function(err, stack) {
     if(!err && !stack) {
       err = new Error("No DataMatrix code found")
