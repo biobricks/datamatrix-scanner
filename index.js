@@ -880,9 +880,6 @@ function run(image, canvas, opts, cb) {
         var remoteA = finderA.remote;
         var remoteB = finderB.remote;
 
-        drawPixel(d, remoteA.x, remoteA.y, "pink", 1);
-        drawPixel(d, remoteB.x, remoteB.y, "pink", 1);
-
         // this can be improved by finding the point
         // at (finderAdeg + finderBdeg) / 2
         // len finderA.remote <> finderB.remote
@@ -898,6 +895,9 @@ function run(image, canvas, opts, cb) {
 
         var x = ax;
         var y = by;
+
+        drawPixel(d, ax, ay, "red", 3);
+        drawPixel(d, bx, by, "blue", 3);
 
         stack.farCorner = new Vector(x, y);
 
