@@ -25,6 +25,7 @@ const MIN_AVG = 100;
 const MAX_AVG = 151;
 const MAX_BLUR = 12;
 const AVG_DEVIATION = 30;
+const AVG_LEN_DEVIATION = 0.75;
 const COLOR_THRESHOLD = 55;
 const DISCARD_SHORT_LINES = true;
 
@@ -1052,13 +1053,18 @@ function run(image, canvas, opts, cb) {
 
             var point = new Vector(x, y);
 
-            if(!segmentStart)
+            if(!segmentStart) {
               segmentStart = point;
-
-            if(bit !== lastBit) {
+            } else if(bit !== lastBit) {
               var length = segmentStart.distance(point);
 
-              if(bit === 0) {
+              if(bit !== 0) {
+                if(avgOffLength > 0 && (length + avgOffLength) / 2 < (avgOffLength * AVG_LEN_DEVIATION)) {
+                  console.log("discarding Off Bit %d", r.offCenterPoints.length);
+                  return;
+                }
+
+                r.count++;
                 offCount++;
                 offLength += length;
                 avgOffLength = offLength / offCount;
@@ -1072,6 +1078,12 @@ function run(image, canvas, opts, cb) {
 
                 drawPixel(d, r.offCenterPoints[i - 1].x, r.offCenterPoints[i - 1].y, "red", 3);
               } else {
+                if(avgOnLength > 0 && (length + avgOnLength) / 2 < (avgOnLength * AVG_LEN_DEVIATION)) {
+                  console.log("discarding On Bit %d", r.offCenterPoints.length);
+                  return;
+                }
+
+                r.count++;
                 onCount++;
                 onLength += length;
                 avgOnLength = onLength / onCount;
@@ -1088,12 +1100,46 @@ function run(image, canvas, opts, cb) {
 
               segmentStart = undefined;
               r.points.push(point);
-
-              r.count++;
             }
 
             lastBit = bit;
           });
+
+          if(segmentStart) {
+            var point = p2;
+            var length = segmentStart.distance(point);
+
+            console.log("Unclosed Bit", lastBit);
+            if(lastBit !== 0) {
+              r.count++;
+              offCount++;
+              offLength += length;
+              avgOffLength = offLength / offCount;
+
+              var i = r.offCenterPoints.push(
+                new Vector(
+                  (segmentStart.x + point.x) / 2,
+                  (segmentStart.y + point.y) / 2
+                  )
+              );
+
+              drawPixel(d, r.offCenterPoints[i - 1].x, r.offCenterPoints[i - 1].y, "red", 3);
+            } else {
+              var i = r.onCenterPoints.push(
+                new Vector(
+                  (segmentStart.x + point.x) / 2,
+                  (segmentStart.y + point.y) / 2
+                )
+              );
+
+              r.count++;
+              onCount++;
+              onLength += length;
+              avgOnLength = onLength / onCount;
+
+              drawPixel(d, r.onCenterPoints[i - 1].x, r.onCenterPoints[i - 1].y, "red", 3);
+            }
+          }
 
           return r;
         }
