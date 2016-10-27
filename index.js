@@ -944,7 +944,7 @@ function run(image, canvas, opts, cb) {
         done(null, stack);
       }, function(stack, done) {
         var d = debugCanvas(stack.blur, {
-          //display: false,
+          display: false,
           blank: true,
           name: "Verify Timing A"
         });
@@ -957,7 +957,7 @@ function run(image, canvas, opts, cb) {
         done(timingLines instanceof Error ? timingLines : null, stack);
       }, function(stack, done) {
         var d = debugCanvas(stack.blur, {
-          //display: false,
+          display: false,
           blank: true,
           name: "Verify Timing B"
         });
