@@ -643,10 +643,6 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
   var outerTiming;
   var innerTiming;
 
-  if(timingA.origin.angle() < timingA.remote.angle()) {
-    a = -a;
-  }
-
   var avgTick = 0;
 
   traverseLine(timingB.p2, timingB.p1, {
