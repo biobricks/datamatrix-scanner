@@ -333,8 +333,8 @@ function findL(lines, opts) {
           finderA.p2.y === finderB.p2.y
         ) continue;
 
-      var lenB = finderB.p1.distance(finderB.p2);
-      finderB.length = lenB;
+      /*
+      var lenB = finderB.length;
 
       // try to discard this earlier
       if(lenB < minLen) continue;
