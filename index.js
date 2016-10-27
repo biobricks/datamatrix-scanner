@@ -647,7 +647,7 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
     var findSideX = x + Math.cos(a) * len;
     var findSideY = y + Math.sin(a) * len;
 
-    drawLine(d, x, y, findSideX, findSideY, 1, "rgba(255,0,0," + (i * len) + ")");
+    drawLine(d, x, y, findSideX, findSideY, 1, "rgba(255,0,0,0.5)");
 
     var lineAvg = getLineAverage(binaryArray, {
       x: x,
