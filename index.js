@@ -1,5 +1,4 @@
 var async = require("async");
-var Canvas = require("canvas");
 var debug = require("debug");
 debug.enable("*");
 debug = debug("bbdm");
@@ -10,6 +9,7 @@ var stackblur = require("stackblur-canvas");
 var lsd = require("line-segment-detector");
 var isNode = require("detect-node");
 
+var Canvas = require("canvas-browserify");
 var $ = !isNode ? document.querySelector.bind(document) : require("cheerio").load("<html><body></body></html>");
 
 var downSize = 400;
@@ -724,12 +724,14 @@ function run(image, canvas, opts, cb) {
     var stack = {
       canvas: canvas,
       ctx: ctx,
-      grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)),
+      grayscale: toGrayscale(ctx.getImageData(0, 0, ctx.canvas.height, ctx.canvas.width)), // TODO is this used for anything? it's done before drawToImage is called
       img: image,
       start: (new Date).valueOf()
     }
 
-    drawImageTo(stack.img, stack.ctx, downSize);
+    if(stack.img) {
+      drawImageTo(stack.img, stack.ctx, downSize);
+    }
 
     done(null, stack);
   }, function(stack, done) {
@@ -813,7 +815,6 @@ function run(image, canvas, opts, cb) {
     }
 
     done(new Error("No Canidates Found"), stack);
-  }, function(stack, done) {
     // Cycle through the candidate pairs finding their
     // nearest points and average those together.
     // TODO: Split function into generation and debugging
@@ -1252,12 +1253,19 @@ function run(image, canvas, opts, cb) {
       done(new Error("nothing found"), stack);
     });
   }], function(err, stack) {
+    if(!err && !stack) {
+      err = new Error("No DataMatrix code found")
+    }
     if(debugMode) {
-      var time = (new Date()).valueOf() - stack.start;
-      console.log("%s! Took %s seconds", err ? "Error" : "Success", time / 1000);
+      if(stack) {
+        var time = (new Date()).valueOf() - stack.start;
+        console.log("Done! Took %s seconds", time / 1000);
+      } else {
+        console.log("Done! No code DataMatrix found");
+      }
     }
 
-    cb(err, stack.bits);
+    cb(err, stack ? stack.bits : null);
   });
 }
 
