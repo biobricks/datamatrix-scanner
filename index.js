@@ -644,8 +644,8 @@ function findTimingLines(binaryArray, timingA, timingB, d) {
   }, function(x, y, i) {
     // this needs to be smarter
     // it should determine if A is + or - of B
-    var findSideX = x - Math.cos(a) * len;
-    var findSideY = y - Math.sin(a) * len;
+    var findSideX = x + Math.cos(a) * len;
+    var findSideY = y + Math.sin(a) * len;
 
     drawLine(d, x, y, findSideX, findSideY, 1, "rgba(255,0,0," + (i * len) + ")");
 
