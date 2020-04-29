@@ -10,7 +10,7 @@
     "dom": "0.0.3",
     "intersect": "^1.0.1",
     "intersection": "0.0.1",
-    "jquery": "~2.2.1",
+    "jquery": "~3.5.0",
     "line-segment-detector": "0.0.4",
     "stackblur-canvas": "^1.2.1",
     "underscore": "^1.8.3",
